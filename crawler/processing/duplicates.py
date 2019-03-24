@@ -9,7 +9,7 @@ import hashlib
 
 def url_duplicateCheck(url, connection):
     """
-    :param url: URL to check (string)
+    :param url: URL to check (string, canonicalized)
     :param connection: psycopg2 connection
     :return: isDuplicate(boolean) or None if check unsucessful
     """
@@ -17,6 +17,7 @@ def url_duplicateCheck(url, connection):
     try:
         cur.execute("""SELECT id FROM crawldb.page WHERE url = %s""", (url))
         # QUESTION pravo poimentovanje tabele?
+        # Assumes urls in database are canonicalized.
     except:
         print('could not execute check')
         return None
