@@ -56,7 +56,11 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
             page_urls.append(canon_url)
 
     # onClick URLs
-    # TODO get onClick URLs
+    print("**********onclick:")
+    for link in page_data.find_all(onclick=True):
+        url = re.search("https?://.*", link.get("onclick"))
+        print(url)
+    print("******** end")
 
     return page_urls
 
@@ -123,7 +127,7 @@ def process_page(url: str):
     if page_state == "redirected":
         end_page = canonicalize_url(arg, url_scheme, url_netloc, config.search_domain)    # Q: what if return value None?? (zaradi domene)
         # TODO check if end_page a duplicate (duplicates check part 1 (URL) (@Gal?))
-
+    print("fetching")
     page_body = fetch_data(url)
     # TODO check for duplicates (duplicates check part 2 (content) (@Gal?))
 
@@ -136,7 +140,8 @@ def process_page(url: str):
 
 if __name__ == '__main__':
     # url1 = "http://dev.vitabits.org"  # should redirect!?!
-    url1 = "http://podatki.gov.si"
+    # url1 = "http://podatki.gov.si"
+    url1 = "https://www.plus2net.com/html_tutorial/button-linking.php"
     process_page(url1)
 
 
