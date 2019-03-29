@@ -139,10 +139,12 @@ def get_files(parentUrl: str, soup: BeautifulSoup, urls: list, conn):
         split = url.split('.')
         filename = split[0]
         content_type = split[1]
-        r = requests.get(url, stream=True)
-        content = r.raw_read(10000000)
-        cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) VALUES (%s, %s, %s, %s, %s)",
-                    [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
+        if content_type in {'img', 'png', 'jpg'}:
+            r = requests.get(url, stream=True)
+            content = r.raw_read(10000000)
+            cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) VALUES (%s, %s, %s, %s, %s)",
+                        [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
+            cur.commit()
         # TODO podobno kot zgoraj, "data", accessed tieme format? time.time()? primernost urlev?
     # TODO dodaj za image v soupu.
     # soup.find('img')['src']
