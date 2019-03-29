@@ -3,6 +3,7 @@ import re
 import logging
 import requests
 import psycopg2
+from datetime import datetime
 
 import urltools
 from selenium import webdriver
@@ -128,15 +129,20 @@ def get_files(parentUrl: str, soup: BeautifulSoup, urls: list, conn):
         data_type_code = (url.split('.')[-1]).upper()
         r = requests.get(url, stream=True)
         content = r.raw_read(10000000)  # tu mozno se potreben decode
-        cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, data) VALUES (%s, %s, %s)", (
-            page_id, data_type_code, psycopg2.Binary(content)))
+        cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, data) VALUES (%s, %s, %s)", [
+            page_id, data_type_code, psycopg2.Binary(content)])
         # TODO poglej ce dela, data v init.sql ima "", kar morda ni okej tu?
         cur.commit()
     for el in soup.find_all('img'):
         url = el['src']
+        # TODO assuming we can canonicalize the url:
+        split = url.split('.')
+        filename = split[0]
+        content_type = split[1]
         r = requests.get(url, stream=True)
         content = r.raw_read(10000000)
-        # cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) VALUES (%s, %s, %s, %s, %s)", (page_id, ?, ?, psycopg2.Binary(content), ? time.time()?))
+        cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) VALUES (%s, %s, %s, %s, %s)",
+                    [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
         # TODO podobno kot zgoraj, "data", accessed tieme format? time.time()? primernost urlev?
     # TODO dodaj za image v soupu.
     # soup.find('img')['src']
