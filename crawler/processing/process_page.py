@@ -2,6 +2,8 @@ import os
 import re
 import logging
 import requests
+import psycopg2
+from datetime import datetime
 
 import urltools
 from selenium import webdriver
@@ -24,15 +26,18 @@ def canonicalize_url(url, parent_scheme, parent_host, search_domain=""):
 
     split_url = urltools.split(url)
 
-    scheme = split_url.scheme or parent_scheme                                              # handle relative URLs
+    # handle relative URLs
+    scheme = split_url.scheme or parent_scheme
     netloc = split_url.netloc or parent_host
     if scheme not in ["http", "https"] or not re.match(".*" + search_domain + "/?$", netloc):
         return None
     path = split_url.path if (split_url.path and split_url.path[0] == "/") \
         else ("/" + split_url.path)                                                         # start path with /
-    path = re.sub("/index\.(html|htm|php)", "/", path)                                      # remove 'index.html/htm/php'
+    # remove 'index.html/htm/php'
+    path = re.sub("/index\.(html|htm|php)", "/", path)
 
-    canon_url = urltools.normalize("{0}://{1}{2}".format(scheme, netloc, quote(path)))      # normalize & quote URL
+    canon_url = urltools.normalize(
+        "{0}://{1}{2}".format(scheme, netloc, quote(path)))      # normalize & quote URL
     return canon_url
 
 
@@ -75,7 +80,8 @@ def fetch_data(url):
     options = Options()
     options.add_argument("--headless")
     options.add_argument('--ignore-certificate-errors')
-    driver = webdriver.Chrome(executable_path=os.path.abspath('../web_driver/chromedriver.exe'), options=options)
+    driver = webdriver.Chrome(executable_path=os.path.abspath(
+        '../web_driver/chromedriver.exe'), options=options)
 
     driver.get(url)
     soup = BeautifulSoup(driver.page_source, features="html.parser")
@@ -111,6 +117,45 @@ def get_page_state(url):
     return "ok", response.status_code
 
 
+def get_files(parentUrl: str, soup: BeautifulSoup, urls: list, conn):
+    """
+    :param soup: BeautifulSoup of the web page content you want to extract image files from.
+    :param parentUrl: url of the page we are currently processing, for page_id
+    :param urls: A list of binary file urls, gotten with get_page_urls
+    :param conn: a psycopg2 connection with which we insert files into our database
+    :return:
+    """
+    cur = conn.cursor()
+    cur.execute("SELECT page_id FROM crawldb.page WHERE url = '%s'" % parentUrl)
+    page_id = cur.fetchall()
+    page_id = page_id[0]
+    for url in urls:
+        data_type_code = (url.split('.')[-1]).upper()
+        r = requests.get(url, stream=True)
+        content = r.raw_read(10000000)  # tu mozno se potreben decode
+        cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, data) VALUES (%s, %s, %s)", [
+            page_id, data_type_code, psycopg2.Binary(content)])
+        # TODO poglej ce dela, data v init.sql ima "", kar morda ni okej tu?
+        cur.commit()
+    for el in soup.find_all('img'):
+        url = el['src']
+        # TODO assuming we can canonicalize the url:
+        split = url.split('.')
+        filename = split[0]
+        content_type = split[1]
+        if content_type in {'img', 'png', 'jpg'}:
+            r = requests.get(url, stream=True)
+            content = r.raw_read(10000000)
+            cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) VALUES (%s, %s, %s, %s, %s)",
+                        [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
+            cur.commit()
+        # TODO podobno kot zgoraj, "data", accessed tieme format? time.time()? primernost urlev?
+    # TODO dodaj za image v soupu.
+    # soup.find('img')['src']
+    # adding data files: cur.execute("INSERT INTO table Values (%s, other data, id...)", (psycopg2.Binary(data)))
+    return
+
+
 def process_page(url: str):
     (page_state, arg) = get_page_state(url)
     if page_state == "error":
@@ -125,7 +170,8 @@ def process_page(url: str):
     url_scheme = split_url.scheme
     url_netloc = split_url.netloc
     if page_state == "redirected":
-        end_page = canonicalize_url(arg, url_scheme, url_netloc, config.search_domain)    # Q: what if return value None?? (zaradi domene)
+        # Q: what if return value None?? (zaradi domene)
+        end_page = canonicalize_url(arg, url_scheme, url_netloc, config.search_domain)
         # TODO check if end_page a duplicate (duplicates check part 1 (URL) (@Gal?))
     print("fetching")
     page_body = fetch_data(url)
@@ -140,8 +186,9 @@ def process_page(url: str):
 
 if __name__ == '__main__':
     # url1 = "http://dev.vitabits.org"  # should redirect!?!
-    # url1 = "http://podatki.gov.si"
-    url1 = "https://www.plus2net.com/html_tutorial/button-linking.php"
+    url1 = "http://podatki.gov.si"
+    # soup = BeautifulSoup(requests.get(url1).text, features="html.parser")
+    # soup.find_all('img')[0]['src']
+
+    # fetch_data(url1)
     process_page(url1)
-
-

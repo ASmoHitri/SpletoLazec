@@ -15,7 +15,7 @@ def url_duplicateCheck(url, connection):
     """
     cur = connection.cursor()
     try:
-        cur.execute("SELECT id FROM crawldb.page WHERE url = '%s'", (url))
+        cur.execute("SELECT id FROM crawldb.page WHERE url = '%s'" % url)
         # QUESTION pravo poimentovanje tabele?
         # Assumes urls in database are canonicalized.
     except:
@@ -39,7 +39,7 @@ def html_duplicateCheck(html, connection):
     content_hash = hashlib.md5(content)
     cur = connection.cursor()
     try:
-        cur.execute("SELECT id FROM crawldb.page WHERE content_hash = '%s'", (content_hash))
+        cur.execute("SELECT id FROM crawldb.page WHERE content_hash = '%s'" % content_hash)
         # QUESTION pravo poimentovanje tabele?
     except:
         print('could not execute check')
