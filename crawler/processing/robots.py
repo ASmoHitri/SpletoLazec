@@ -8,6 +8,7 @@ from process_page import canonicalize_url
 import time
 from datetime import datetime
 import config
+from duplicates import url_duplicateCheck
 
 #Additional functions
 def contains_sitemap(txt):
@@ -113,20 +114,26 @@ def can_fetch_page(url, connection):
                 #definiramo next_acces time
                 next_acces_time = datetime.fromtimestamp(time.time() + delay)
 
-                # v primeru, da sitemap ni prazen dodamo vse strani v frontier
-                if sitemap_content:
-                    sites = process_sitemap(sitemap_content)
-                    for site in sites:
-                        # TODO: dodaj strani na frontier
-                        #TODO: kakšen ali je tu parent scheme http ali https
-                        cannon_site = canonicalize_url(site, "http", domain, config.search_domain)
-                        print(cannon_site)
-
                 # dodamo domeno v bazo
                 curs.execute(
                     "INSERT into crawldb.site (domain , robots_content, sitemap_content, next_acces, delay) VALUES (%s, %s, %s, %s, %s) RETURNING id",
                     (domain, robots_content, sitemap_content, next_acces_time, delay))
                 site_id = curs.fetchone()[0]
+
+                # v primeru, da sitemap ni prazen dodamo vse strani v frontier
+                if sitemap_content:
+                    sites = process_sitemap(sitemap_content)
+                    for site in sites:
+                        cannon_site = canonicalize_url(site, "http", domain, config.search_domain)
+                        # če se stran še ni pojavila jo dodamo v bazo
+                        if url_duplicateCheck(cannon_site, conn):
+                            curs.execute(
+                                "INSERT INTO crawldb.page (site_id, page_type_code,url, accesed_time) RETURNING id",
+                                [site_id, 'FRONTIER', cannon_site, datetime.now()])
+                            cur_id = curs.fetchone()
+                            curs.execute("INSERT INTO crawldb.frontier (page_id)", [cur_id])
+                        else:
+                            continue
 
                 if can_fetch:
                     return (site_id, True, False, False)
@@ -176,6 +183,59 @@ def can_fetch_page(url, connection):
                             return (site_id, False, True, False)
                     else:
                         return (site_id, False, False, True)
+
+#funkcija add domain prejme domeno, ki ni v bazi
+#doda domeno v bazo in vrne site_id
+def add_domain(domain, connection):
+    """
+    :param domain that has to be added to the DB
+    :param connection to the DB
+    :return: site_id of the newly added site
+    """
+    with connection as conn:
+        with conn.cursor() as curs:
+            robots_content, sitemap_content = get_robots_content(domain)
+
+            # če robots_content ni prazen
+            if robots_content:
+                rp = urllib.robotparser.RobotFileParser()
+                rp.parse(robots_content.splitlines())
+                # crawl delay (preverimo, če je definiran drugače je privzeta vrednost 4s)
+                try:
+                    delay = rp.crawl_delay("*")
+                except:
+                    delay = 4
+            else:
+                can_fetch = True
+                delay = 4
+
+            # če delay ni definiran mu damo privzeto vrednost
+            if not delay:
+                delay = 4
+
+            # definiramo next_acces time
+            next_acces_time = datetime.fromtimestamp(time.time() + delay)
+
+            # dodamo domeno v bazo
+            curs.execute(
+                "INSERT into crawldb.site (domain , robots_content, sitemap_content, next_acces, delay) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (domain, robots_content, sitemap_content, next_acces_time, delay))
+            site_id = curs.fetchone()[0]
+
+            # v primeru, da sitemap ni prazen dodamo vse strani v frontier
+            if sitemap_content:
+                sites = process_sitemap(sitemap_content)
+                for site in sites:
+                    cannon_site = canonicalize_url(site, "http", domain, config.search_domain)
+                    #če se stran še ni pojavila jo dodamo v bazo
+                    if url_duplicateCheck(cannon_site, conn):
+                        curs.execute("INSERT INTO crawldb.page (site_id, page_type_code,url, accesed_time) RETURNING id",
+                                     [site_id, 'FRONTIER', cannon_site, datetime.now()])
+                        cur_id = curs.fetchone()
+                        curs.execute("INSERT INTO crawldb.frontier (page_id)",[cur_id])
+                    else:
+                        continue
+    return site_id
 
 
 #TEST
