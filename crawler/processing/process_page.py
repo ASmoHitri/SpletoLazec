@@ -9,9 +9,10 @@ from datetime import datetime
 import urltools
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
 from urllib.parse import quote
-from robots import add_domain
+# from robots import add_domain
 import config
 
 
@@ -26,8 +27,6 @@ def canonicalize_url(url, parent_scheme, parent_host, search_domain=""):
     """
 
     split_url = urltools.split(url)
-
-    # TODO kaj ce ni v domeni
 
     # handle relative URLs
     scheme = split_url.scheme or parent_scheme
@@ -100,18 +99,20 @@ def fetch_data(url):
     :param url: URL to fetch
     :return: page body as BeautifulSoup object
     """
-    # TODO error/exceptions handling (try, catch)
     options = Options()
     options.add_argument("--headless")
     options.add_argument('--ignore-certificate-errors')
-    driver = webdriver.Chrome(executable_path=os.path.abspath(
-        '../web_driver/chromedriver.exe'), options=options)
+    try:
+        driver = webdriver.Chrome(executable_path=os.path.abspath(
+            '../web_driver/chromedriver.exe'), options=options)
+        driver.get(url)
+    except WebDriverException as e:
+        logging.error(e.msg)
+        return None
 
-    driver.get(url)
     soup = BeautifulSoup(driver.page_source, features="html.parser")
     for script in soup(["head"]):
         script.extract()
-    # print(soup)
     driver.close()
     return soup
 
@@ -287,6 +288,6 @@ if __name__ == '__main__':
     # str1 = re.search("doc", str)
     # print(str1.group(0))
 
-    page = "http://www.lpp.si/javni-prevoz/ceniki?fbclid=IwAR1rJLWxICiiIBjGvuj1PvAnenJK-tISgvv3VQ2-UcvUDSMRalciJG-N1us"
-    process_page(page, None)
+    page = "hp://nevemmms"
+    print(fetch_data(page))
 
