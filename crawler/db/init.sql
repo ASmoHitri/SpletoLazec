@@ -67,6 +67,12 @@ CREATE TABLE crawldb.link (
 	CONSTRAINT _0 PRIMARY KEY ( from_page, to_page )
  );
 
+ CREATE TABLE crawldb.frontier (
+	page_id 							integer PRIMARY KEY REFERENCES crawldb.page(id),
+	time_added						timestamp DEFAULT Now(),
+	occupied							boolean DEFAULT False
+ );
+
 CREATE INDEX "idx_link_from_page" ON crawldb.link ( from_page );
 
 CREATE INDEX "idx_link_to_page" ON crawldb.link ( to_page );

@@ -268,10 +268,10 @@ def process_page(url: str, conn):
         else:
             cur_site_id = cur_site_id[0]
 
-        cur.execute("INSERT insert crawldb.page (site_id, page_type_code, url, accessed_time)", [
+        cur.execute("INSERT INTO crawldb.page (site_id, page_type_code, url, accessed_time) RETURNING id", [
                     cur_site_id, 'FRONTIER', cur_canon_url,  datetime.now()])
-
-        cur.execute("dodaj v frontier?")
+        cur_id = cur.fetchall()[0]
+        cur.execute("INSERT INTO crawldb.frontier (page_id)", [cur_id])
         cur.commit()
     cur.close()
     # TODO nekam je treba vkljuciti se robots/sitemap zadeve (@Jan?)
