@@ -6,7 +6,7 @@ import psycopg2
 import duplicates
 from datetime import datetime
 
-# import urltools
+import urltools
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
@@ -26,6 +26,8 @@ def canonicalize_url(url, parent_scheme, parent_host, search_domain=""):
     """
 
     split_url = urltools.split(url)
+
+    # TODO kaj ce ni v domeni
 
     # handle relative URLs
     scheme = split_url.scheme or parent_scheme
@@ -50,27 +52,46 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
     :param parent_scheme: Parent page's scheme
     :param parent_host: Parent page's host (domain name)
 
-    :return: List of page URLs
+    :return: List of page URLs, list of binaries URLs, list of img URLs
     """
 
     page_urls = []
+    binaries_urls = []
+    binaries_regex = ".(pdf|PDF|doc|DOC|ppt|PPT)(x|X)?\/?$"
     # href URLs
     for link in page_data.find_all(href=True):
         url = link.get("href")
         canon_url = canonicalize_url(url, parent_scheme, parent_host, search_domain)
         if canon_url:
-            page_urls.append(canon_url)
+            if re.search(binaries_regex, canon_url):
+                binaries_urls.append(canon_url)
+            else:
+                page_urls.append(canon_url)
 
     # onClick URLs
-    # print("**********onclick:")
     for link in page_data.find_all(onclick=True):
-        url = re.search("((document|window).)?location(.href)?=.*", link.get("onclick"))        # TODO preveri ali ok regex
-        # print(url)
+        onclick_link = link.get("onclick")
+        before_link = re.search("((document|window|parent).)?location(.href)?=", onclick_link)
+        if before_link:
+            before_link = before_link.group(0)
+            onclick_link = onclick_link.replace(before_link, "").replace("'", "")
+            canon_url = canonicalize_url(onclick_link, parent_scheme, parent_host, search_domain)
+            if canon_url:
+                if re.search(binaries_regex, canon_url):
+                    binaries_urls.append(canon_url)
+                else:
+                    page_urls.append(canon_url)
 
-
-    # print("******** end")
-
-    return page_urls
+    # img urls
+    img_urls = []
+    img_regex = ".(png|PNG|img|IMG|jp(e)?g|JP(E)?G)$"
+    for link in page_data.find_all("img"):
+        url = link["src"]
+        canon_url = canonicalize_url(url, parent_scheme, parent_host)       # TODO Q: ali tudi slike samo tiste ki v pravi domeni?
+        if canon_url and re.search(img_regex, canon_url):
+            img_urls.append(canon_url)
+            
+    return page_urls, binaries_urls, img_urls
 
 
 def fetch_data(url):
@@ -158,6 +179,13 @@ def get_files(parentUrl: str, urls_img: list, urls_binary: list, conn):
 
 def process_page(url: str, conn):
     (page_state, arg) = get_page_state(url)
+    page_body = fetch_data(url)
+    split_url = urltools.split(url)
+    url_scheme = split_url.scheme
+    url_netloc = split_url.netloc
+    get_page_urls(page_body, url_scheme, url_netloc)
+
+    return
     cur = conn.cursor()
 
     cur.execture("SELECT id from crawldb.page WHERE url = %s", [url])
@@ -180,7 +208,6 @@ def process_page(url: str, conn):
         # Q: what if return value None?? (zaradi domene)
         end_page = canonicalize_url(arg, url_scheme, url_netloc, config.search_domain)
         (page_state, arg) = get_page_state(end_page)
-        # veckratno redirectanje?
         if duplicates.url_duplicateCheck(end_page, conn):
             cur.execute("UPDATE crawldb.page SET page_type_code = %s, http_status_code = %s, accessed_time = %s WHERE id = %s", [
                         'DUPLICATE', arg, datetime.now(), page_id])
@@ -258,7 +285,11 @@ if __name__ == '__main__':
     #
     # # fetch_data(url1)
     # process_page(url1)
-    print("zacetek")
-    str = "doc.min.oiiof"
-    str1 = re.search("doc", str)
-    print(str1.group(0))
+    # print("zacetek")
+    # str = "doc.min.oiiof"
+    # str1 = re.search("doc", str)
+    # print(str1.group(0))
+
+    page = "http://www.lpp.si/javni-prevoz/ceniki?fbclid=IwAR1rJLWxICiiIBjGvuj1PvAnenJK-tISgvv3VQ2-UcvUDSMRalciJG-N1us"
+    process_page(page, None)
+
