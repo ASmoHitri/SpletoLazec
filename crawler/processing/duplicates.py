@@ -22,11 +22,14 @@ def url_duplicateCheck(url, connection):
         # Assumes urls in database are canonicalized.
     except:
         print('could not execute check')
+        cur.close()
         return None
 
     if not cur.fetchall():
+        cur.close()
         return False
     else:
+        cur.close()
         return True
 
 
@@ -45,14 +48,15 @@ def html_duplicateCheck(html: BeautifulSoup, connection):
         # QUESTION pravo poimentovanje tabele?
     except:
         print('could not execute check')
+        cur.close()
         return None
 
     if not cur.fetchall():
-        # TODO ali je treba cursorje zapirati, isto v url_duplicatecheck?
+        cur.close()
         return False
     else:
+        cur.close()
         return True
-    pass
 
 
 # def init_html_hashtable():
@@ -72,7 +76,6 @@ def html_duplicateCheck(html: BeautifulSoup, connection):
 #     :return: isNearDuplicate(boolean), new_hashtable
 #     """
 #     pass
-
 if __name__ == '__main__':
     db = config.db
     conn = psycopg2.connect(user=db['username'], password=db['password'],
@@ -80,6 +83,7 @@ if __name__ == '__main__':
     # cur = conn.cursor()
     # cur.execute("SELECT id FROM crawldb.page WHERE url = %s", ['mojprimer'])
     # cur.fetchall()
+    # cur.close()
 
     test_url = 'www.test.com'
     # urllib.parse.urlsplit(sample_url)

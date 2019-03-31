@@ -1,5 +1,6 @@
 import psycopg2
 import process_page
+import robots
 # pools
 import threading
 # multithreading
@@ -23,6 +24,7 @@ def crawler(conn):
     # when we have a page we can process_page()
     # QUESTION ali je potrebno cursorje zapirati? ker en cursor bo odprt v crawlerju, potem bo pa na isto povezavo še v process_page()
     # cur = conn.cursor()
+    #
 
     pass
 
