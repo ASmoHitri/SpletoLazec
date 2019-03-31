@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from process_page import canonicalize_url
 import time
 from datetime import datetime
+import config
 
 #Additional functions
 def contains_sitemap(txt):
@@ -74,7 +75,7 @@ def can_fetch_page(url, connection):
     """
     :param url: canonicalized url
     :param connection: a psycopg2 connection with which we insert files into our database
-    :return: returns a tuple (boolean, delay(boolean), forbidden(boolean))
+    :return: returns a tuple (site_id, boolean, delay(boolean), forbidden(boolean))
     """
     split_url = urltools.split(url)
     domain = split_url.netloc
@@ -83,7 +84,7 @@ def can_fetch_page(url, connection):
     with connection as conn:
         with conn.cursor() as curs:
             #preverimo, če je domena že v bazi
-            curs.execute("SELECT robots_content, next_acces, delay FROM crawldb.site WHERE domain = '%s'" % domain)
+            curs.execute("SELECT id, robots_content, next_acces, delay FROM crawldb.site WHERE domain = '%s'" % domain)
             existing_domain = curs.fetchone()
 
             #če domene še ni v bazi
@@ -97,13 +98,16 @@ def can_fetch_page(url, connection):
                     #  pogledamo, če lahko vhodni url-fetchamo
                     can_fetch = rp.can_fetch("*", url)
                     #crawl delay (preverimo, če je definiran drugače je privzeta vrednost 4s)
-                    c_delay = rp.crawl_delay("*")
-                    if c_delay:
-                        delay = c_delay
-                    else:
+                    try:
+                        delay = rp.crawl_delay("*")
+                    except:
                         delay = 4
                 else:
                     can_fetch = True
+                    delay = 4
+
+                #če delay ni definiran mu damo privzeto vrednost
+                if not delay:
                     delay = 4
 
                 #definiramo next_acces time
@@ -114,24 +118,27 @@ def can_fetch_page(url, connection):
                     sites = process_sitemap(sitemap_content)
                     for site in sites:
                         # TODO: dodaj strani na frontier
-                        cannon_site = canonicalize_url(site, "http", domain)
+                        #TODO: kakšen ali je tu parent scheme http ali https
+                        cannon_site = canonicalize_url(site, "http", domain, config.search_domain)
                         print(cannon_site)
 
                 # dodamo domeno v bazo
                 curs.execute(
-                    "INSERT into crawldb.site (domain , robots_content, sitemap_content, next_acces, delay) VALUES (%s, %s, %s, %s, %s)",
+                    "INSERT into crawldb.site (domain , robots_content, sitemap_content, next_acces, delay) VALUES (%s, %s, %s, %s, %s) RETURNING id",
                     (domain, robots_content, sitemap_content, next_acces_time, delay))
+                site_id = curs.fetchone()[0]
 
                 if can_fetch:
-                    return (True, False, False)
+                    return (site_id, True, False, False)
                 else:
-                    return (False, False, True)
+                    return (site_id, False, False, True)
 
             #če je domena že v bazi, izberemo robots content
             else:
-                robots_content = existing_domain[0]
-                acces_time = datetime.timestamp(existing_domain[1])
-                delay = existing_domain[2]
+                site_id = existing_domain[0]
+                robots_content = existing_domain[1]
+                acces_time = datetime.timestamp(existing_domain[2])
+                delay = existing_domain[3]
 
                 # informacije o robots.txt
                 #če je prazen robots, preverimo samo delay
@@ -144,9 +151,9 @@ def can_fetch_page(url, connection):
                                         SET next_acces = %s
                                         WHERE domain = %s"""
                         curs.execute(sql, (next_acces_update, domain))
-                        return (True, False, False)
+                        return (site_id, True, False, False)
                     else:
-                        return (False, True, False)
+                        return (site_id, False, True, False)
                 else:
                     #robot parser
                     rp = urllib.robotparser.RobotFileParser()
@@ -164,39 +171,39 @@ def can_fetch_page(url, connection):
                                      WHERE domain = %s"""
                             curs.execute(sql, (next_acces_update,domain))
 
-                            return (True, False, False)
+                            return (site_id, True, False, False)
                         else:
-                            return (False, True, False)
+                            return (site_id, False, True, False)
                     else:
-                        return (False, False, True)
+                        return (site_id, False, False, True)
 
 
 #TEST
 #definiramo seznam začetnih spletnih mest za katere bomo pobrali robots.txt in parsali sitemapa, če jih vsebujejo
-# startingSites = ["http://evem.gov.si", "http://e-uprava.gov.si","http://podatki.gov.si","http://e-prostor.gov.si"]
-#
-#
-#
-# import  psycopg2
-# from config import *
-#
-# conn = psycopg2.connect(user=db['username'], password=db['password'],
-#                             host=db['host'], port=db['port'], database=db['db_name'])
-#
-# with conn:
-#     with conn.cursor() as curs:
-#         curs.execute("INSERT into crawldb.site (domain , robots_content, sitemap_content, next_acces, delay) VALUES (%s, %s, %s, %s, %s)", (
-#             "e-uprava.gov.si", None, None,datetime(2019, 3, 29, 20, 3, 7, 717148),150))
-#
-#
-# with conn:
-#     with conn.cursor() as curs:
-#         curs.execute("SELECT * FROM crawldb.site")
-#         data = curs.fetchall()
-# data
-# with conn:
-#     with conn.cursor() as curs:
-#         curs.execute("TRUNCATE crawldb.site CASCADE")
+ss = ["http://evem.gov.si", "http://e-uprava.gov.si","http://podatki.gov.si","http://e-prostor.gov.si"]
+
+
+
+import  psycopg2
+from config import *
+
+conn = psycopg2.connect(user=db['username'], password=db['password'],
+                            host=db['host'], port=db['port'], database=db['db_name'])
+
+with conn:
+    with conn.cursor() as curs:
+        curs.execute("INSERT into crawldb.site (domain , robots_content, sitemap_content, next_acces, delay) VALUES (%s, %s, %s, %s, %s)", (
+            "e-uprava.gov.si", None, None,datetime(2019, 3, 29, 20, 3, 7, 717148),150))
+
+
+with conn:
+    with conn.cursor() as curs:
+        curs.execute("SELECT * FROM crawldb.site")
+        data = curs.fetchall()
+data
+with conn:
+    with conn.cursor() as curs:
+        curs.execute("TRUNCATE crawldb.site CASCADE")
 
 
 
