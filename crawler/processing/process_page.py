@@ -127,6 +127,7 @@ def get_files(parentUrl: str, soup: BeautifulSoup, urls: list, conn):
     page_id = page_id[0]
     for url in urls:
         data_type_code = (url.split('.')[-1]).upper()
+        # TODO boljse da uporablam urltools.spit()?
         r = requests.get(url, stream=True)
         content = r.raw_read(10000000)  # tu mozno se potreben decode
         cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, data) VALUES (%s, %s, %s)", [
@@ -137,6 +138,7 @@ def get_files(parentUrl: str, soup: BeautifulSoup, urls: list, conn):
         url = el['src']
         # TODO assuming we can canonicalize the url:
         split = url.split('.')
+        # TODO boljse da uporabljam urltools.split()?
         filename = split[0]
         content_type = split[1]
         if content_type in {'img', 'png', 'jpg'}:
