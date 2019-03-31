@@ -11,7 +11,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from urllib.parse import quote
-
+from robots import add_domain
 import config
 
 
@@ -261,10 +261,7 @@ def process_page(url: str, conn):
         cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_url_netloc])
         cur_site_id = cur.fetchall()
         if not cur_site_id:  # ce domene se ni v bazi
-            # cur.execute(
-                # "INSERT into crawldb.site (\"domain\", robots_content, sitemap_content, next_acces, delay)", [cur_url_netloc, ??, ??, ??, ??])
-                # TODO popravi zgornji insert s funkcijami iz robots.
-            cur.commit()
+            cur_site_id = add_domain(cur_url_netloc, conn)
         else:
             cur_site_id = cur_site_id[0]
 
