@@ -5,7 +5,7 @@ import requests
 import psycopg2
 from datetime import datetime
 
-import urltools
+# import urltools
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
@@ -61,11 +61,13 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
             page_urls.append(canon_url)
 
     # onClick URLs
-    print("**********onclick:")
+    # print("**********onclick:")
     for link in page_data.find_all(onclick=True):
-        url = re.search("https?://.*", link.get("onclick"))
-        print(url)
-    print("******** end")
+        url = re.search("((document|window).)?location(.href)?=.*", link.get("onclick"))        # TODO preveri ali ok regex
+        # print(url)
+
+
+    # print("******** end")
 
     return page_urls
 
@@ -185,10 +187,14 @@ def process_page(url: str):
 
 
 if __name__ == '__main__':
-    # url1 = "http://dev.vitabits.org"  # should redirect!?!
-    url1 = "http://podatki.gov.si"
-    # soup = BeautifulSoup(requests.get(url1).text, features="html.parser")
-    # soup.find_all('img')[0]['src']
-
-    # fetch_data(url1)
-    process_page(url1)
+    # # url1 = "http://dev.vitabits.org"  # should redirect!?!
+    # url1 = "http://podatki.gov.si"
+    # # soup = BeautifulSoup(requests.get(url1).text, features="html.parser")
+    # # soup.find_all('img')[0]['src']
+    #
+    # # fetch_data(url1)
+    # process_page(url1)
+    print("zacetek")
+    str = "doc.min.oiiof"
+    str1 = re.search("doc", str)
+    print(str1.group(0))
