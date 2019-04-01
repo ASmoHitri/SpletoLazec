@@ -88,7 +88,7 @@ def start_crawlers(nr_of_threads):
         cur.execute("SELECT * FROM crawldb.frontier LIMIT 1")
         frontier_url = cur.fetchone()
         if not frontier_url:
-            process_page.add_urls_to_frontier(config.seed_urls, db_pool)
+            process_page.add_urls_to_frontier(config.seed_urls, connection)
         # make sure all pages in frontier are marked as unoccupied
         cur.execute("UPDATE crawldb.frontier SET occupied=False")
     db_pool.putconn(connection)

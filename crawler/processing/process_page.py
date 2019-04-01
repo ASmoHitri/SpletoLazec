@@ -3,6 +3,7 @@ import logging
 import requests
 import psycopg2
 import psycopg2.extras
+import hashlib
 from datetime import datetime
 
 import urltools
@@ -28,8 +29,7 @@ def fetch_data(url):
     options.add_argument("--headless")
     options.add_argument('--ignore-certificate-errors')
     try:
-        driver = webdriver.Chrome(executable_path=os.path.abspath(
-            '../web_driver/chromedriver.exe'), options=options)
+        driver = webdriver.Chrome(executable_path=os.path.abspath('./web_driver/chromedriver.exe'), options=options)
         driver.get(url)
     except WebDriverException as e:
         logging.error(e.msg)
@@ -73,7 +73,7 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
 
     # get parent page id from database
     with conn, conn.cursor() as cur:
-        cur.execute("SELECT page_id FROM crawldb.page WHERE url = '%s'" % parent_url)
+        cur.execute("SELECT id FROM crawldb.page WHERE url = '%s'" % parent_url)
         page_id = cur.fetchall()
     if page_id:
         page_id = page_id[0]
@@ -83,7 +83,7 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
     for url in urls_binary:
         data_type_code = (url.split('.')[-1]).upper()
         r = requests.get(url, stream=True)
-        content = r.raw_read(10000000)  # TODO tu mozno se potreben decode
+        content = r.raw.read(10000000)  # TODO tu mozno se potreben decode
         with conn, conn.cursor() as cur:
             cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
                         [page_id, data_type_code, psycopg2.Binary(content)])
@@ -94,7 +94,7 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
         content_type = split[-1].lower()
         if content_type in {'img', 'png', 'jpg'}:
             r = requests.get(url, stream=True)
-            content = r.raw_read(10000000)
+            content = r.raw.read(10000000)
             with conn, conn.cursor() as cur:
                 cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) \
                              VALUES (%s, %s, %s, %s, %s)",
@@ -136,22 +136,22 @@ def process_page(url: str, conn):
 
     if page_state == "error":
         # if page returned error before just remove from frontier, otherwise re-add to frontier & update code
-        with conn, conn.cursor():
+        with conn, conn.cursor() as cur:
             cur.execute(queries.q['remove_from_frontier'], [page_id])
         if page['http_status_code']:
             page_type = 'HTML'
         else:
             page_type = 'FRONTIER'
-            with conn, conn.cursor():
+            with conn, conn.cursor() as cur:
                 cur.execute(queries.q['add_to_frontier'], [page_id])
-        with conn, conn.cursor():
+        with conn, conn.cursor() as cur:
             cur.execute(queries.q['update_page_codes'], [page_type, state_arg, page_id])
         return
     elif page_state is None:
         # failed to fetch page -> re-add page to frontier
-        with conn, conn.cursor():
+        with conn, conn.cursor() as cur:
             cur.execute(queries.q['remove_from_frontier'], [page_id])
-        with conn, conn.cursor():
+        with conn, conn.cursor() as cur:
             cur.execute(queries.q['add_to_frontier'], [page_id])
         return
 
@@ -172,9 +172,12 @@ def process_page(url: str, conn):
     add_urls_to_frontier(new_urls, conn, page_id)
 
     # mark page as crawled
+    page_html = str(page_body)
+    content_hash = hashlib.md5(page_html.encode()).hexdigest()
+    # print(content_hash)
     with conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE crawldb.page \
-            SET page_type_code=%s, html_content=%s, http_status_code=%s, accessed_time=NOW() \
+            SET page_type_code=%s, html_content=%s, http_status_code=%s, content_hash=%s, accessed_time=NOW() \
             WHERE id=%s",
-            ['HTML', page_body, state_arg, page_id])
+            ['HTML', page_html, state_arg, content_hash, page_id])
