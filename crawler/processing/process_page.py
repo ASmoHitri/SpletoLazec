@@ -103,11 +103,12 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
 
 
 def add_urls_to_frontier(new_urls, conn, parent_page_id=None):
+    # connection = db_pool.getconn()
     for cur_url in new_urls:
         if duplicates.url_duplicateCheck(cur_url, conn):
             continue
         cur_split_url = urltools.split(cur_url)
-        with conn.cursor() as cur:
+        with conn, conn.cursor() as cur:
             cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_split_url.netloc])
             cur_site_id = cur.fetchall()
             if not cur_site_id:
@@ -115,6 +116,7 @@ def add_urls_to_frontier(new_urls, conn, parent_page_id=None):
             else:
                 cur_site_id = cur_site_id[0]
 
+        with conn, conn.cursor() as cur:
             cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
             cur_id = cur.fetchall()[0]
             cur.execute(queries.q['add_to_frontier'], [cur_id])

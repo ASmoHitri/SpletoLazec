@@ -9,7 +9,7 @@ def url_duplicateCheck(url, connection):
     :param connection: psycopg2 connection
     :return: isDuplicate(boolean) or None if check unsuccessful
     """
-    with connection.cursor() as cur:
+    with connection, connection.cursor() as cur:
         try:
             cur.execute("SELECT id FROM crawldb.page WHERE url = %s", [url])
         except Exception:
@@ -29,7 +29,7 @@ def html_duplicateCheck(html: BeautifulSoup, connection):
     """
     content = str(html)
     content_hash = hashlib.md5(content.encode()).hexdigest()
-    with connection.cursor() as cur:
+    with connection, connection.cursor() as cur:
         try:
             cur.execute("SELECT id FROM crawldb.page WHERE content_hash = %s", [content_hash])
         except Exception:

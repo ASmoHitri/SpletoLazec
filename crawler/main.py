@@ -21,7 +21,7 @@ def get_page_to_process(connection, sleep_time, max_sleeps):
     consecutive_sleeps = 0
     new_page = {}
     while not new_page:
-        with connection.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        with connection, connection.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(queries.q['get_url_id_from_frontier'])
             urls = cur.fetchall()
             if not urls:
@@ -32,12 +32,11 @@ def get_page_to_process(connection, sleep_time, max_sleeps):
                 time.sleep(sleep_time)
             else:
                 # get page
-                page_id = urls[0]['id']
+                page_id = urls[0]['page_id']
                 cur.execute(queries.q['get_page_by_id'], [page_id])
                 new_page = cur.fetchone()
                 # mark page as occupied in frontier
                 cur.execute(queries.q['update_frontier_page_occ'], [True, page_id])
-
     return new_page
 
 
@@ -57,7 +56,7 @@ def crawler(conn, crawler_id):
                 return
 
             if page_to_free >= 0:
-                with conn.cursor() as cur:
+                with conn, conn.cursor() as cur:
                     cur.execute(queries.q['update_frontier_page_occ'], [False, page_to_free])
                 page_to_free = -1
 
@@ -70,7 +69,7 @@ def crawler(conn, crawler_id):
                     page_to_free = current_page_id
                     continue
                 else:                                           # can't fetch -> forbidden
-                    with conn.cursor() as cur:
+                    with conn, conn.cursor() as cur:
                         cur.execute(queries.q['update_page_codes'], ['FORBIDDEN', None, current_page_id])  # mark as forbidden
                         cur.execute(queries.q['remove_from_frontier'], [current_page_id])                  # remove from frontier
                     continue
@@ -78,24 +77,23 @@ def crawler(conn, crawler_id):
 
 
 def start_crawlers(nr_of_threads):
-    # INIT
-    with psycopg2.connect(user=config.db['username'], password=config.db['password'],
-                          host=config.db['host'], port=config.db['port'], database=config.db['db_name']) as connection:
-        # if frontier empty -> initialize it with seed urls
-        with connection.cursor() as cur:
-            cur.execute("SELECT * FROM crawldb.frontier LIMIT 1")
-            frontier_url = cur.fetchone()
-            if not frontier_url:
-                process_page.add_urls_to_frontier(config.seed_urls, connection)
-        # make sure all pages in frontier are marked as unoccupied
-        with connection.cursor() as cur:
-            cur.execute("UPDATE crawldb.frontier SET occupied=False")
-
-    # CRAWL
-    db_pool = psycopg2.pool.ThreadedConnectionPool(1, nr_of_threads, user=config.db['username'],
+    db_pool = psycopg2.pool.ThreadedConnectionPool(5, 20, user=config.db['username'],
                                                    password=config.db['password'],
                                                    host=config.db['host'], port=config.db['port'],
                                                    database=config.db['db_name'])
+    # INIT
+    connection = db_pool.getconn()
+    with connection, connection.cursor() as cur:
+        # if frontier empty -> initialize it with seed urls
+        cur.execute("SELECT * FROM crawldb.frontier LIMIT 1")
+        frontier_url = cur.fetchone()
+        if not frontier_url:
+            process_page.add_urls_to_frontier(config.seed_urls, db_pool)
+        # make sure all pages in frontier are marked as unoccupied
+        cur.execute("UPDATE crawldb.frontier SET occupied=False")
+    db_pool.putconn(connection)
+
+    # CRAWL
     crawlers = []
     for i in range(nr_of_threads):
         c = threading.Thread(target=crawler, args=(db_pool.getconn(), i))
