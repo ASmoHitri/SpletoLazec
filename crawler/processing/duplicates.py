@@ -1,8 +1,6 @@
-import psycopg2
 import hashlib
 import logging
 from bs4 import BeautifulSoup
-from crawler import config
 
 
 def url_duplicateCheck(url, connection):
@@ -41,35 +39,3 @@ def html_duplicateCheck(html: BeautifulSoup, connection):
         if cur.fetchall():
             return True
         return False
-
-
-# def init_html_hashtable():
-#     """
-#     """
-#     pass
-#
-#
-# def html_duplicateCheckLSH(html, hash, hashtable):
-#     def shingle(html):
-#         pass
-#
-#     """
-#     :param url:
-#     :param hash:
-#     :param hashtable:
-#     :return: isNearDuplicate(boolean), new_hashtable
-#     """
-#     pass
-if __name__ == '__main__':
-    db = config.db
-    conn = psycopg2.connect(user=db['username'], password=db['password'],
-                            host=db['host'], port=db['port'], database=db['db_name'])
-    # cur = conn.cursor()
-    # cur.execute("SELECT id FROM crawldb.page WHERE url = %s", ['mojprimer'])
-    # cur.fetchall()
-    # cur.close()
-
-    test_url = 'www.test.com'
-    # urllib.parse.urlsplit(sample_url)
-    sample_url = "http://podatki.gov.si/nekejsmrdi"
-    # moramo testirati z napolnjeno bazo
