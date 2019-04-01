@@ -31,10 +31,8 @@ def crawler(conn, crawler_id):
     # # DB TEST
     # with conn.cursor() as cursor:
     #     cursor.execute("insert into crawldb.site (\"domain\") VALUES ('moja domena')")
-    #     conn.commit
     #     cursor.execute("SELECT * from crawldb.site where domain=%s", ['moja domena'])
     #     res = cursor.fetchall()
-    #     conn.commit()
     # print(res)
     # return
     consecutive_sleeps = 0
