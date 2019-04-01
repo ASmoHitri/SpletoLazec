@@ -42,10 +42,6 @@ def get_page_to_process(connection, sleep_time, max_sleeps):
 
 
 def crawler(conn, crawler_id):
-    # TODO check sites if it can be acessed
-    # -> if yes:
-    # consult with robots to add a timestamp to the site database when the domain can be acessed next.
-
     while True:
         can_fetch = False
         current_url = ""
@@ -86,13 +82,13 @@ def start_crawlers(nr_of_threads):
     with psycopg2.connect(user=config.db['username'], password=config.db['password'],
                           host=config.db['host'], port=config.db['port'], database=config.db['db_name']) as connection:
         # if frontier empty -> initialize it with seed urls
-        with connection.cursor as cur:
+        with connection.cursor() as cur:
             cur.execute("SELECT * FROM crawldb.frontier LIMIT 1")
-            frontier_url = cur.fetchone
+            frontier_url = cur.fetchone()
             if not frontier_url:
                 process_page.add_urls_to_frontier(config.seed_urls, connection)
         # make sure all pages in frontier are marked as unoccupied
-        with connection.cursor as cur:
+        with connection.cursor() as cur:
             cur.execute("UPDATE crawldb.frontier SET occupied=False")
 
     # CRAWL

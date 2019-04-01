@@ -5,7 +5,7 @@ db = {
     'username': 'postgres',
     'password': 'postgres'
 }
-seed_urls = ["http://evem.gov.si/", "http://e-uprava.gov.si", "http://podatki.gov.si", "http://e-prostor.gov.si"]       # must be canonicalized
+seed_urls = ["http://evem.gov.si/", "http://e-uprava.gov.si/", "http://podatki.gov.si/", "http://e-prostor.gov.si/"]    # must be canonicalized
 search_domain = "gov.si"
 sleep_time = 60        # in seconds
 max_sleeps = 5
