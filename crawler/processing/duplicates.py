@@ -11,19 +11,16 @@ def url_duplicateCheck(url, connection):
     :param connection: psycopg2 connection
     :return: isDuplicate(boolean) or None if check unsuccessful
     """
-    cur = connection.cursor()
-    try:
-        cur.execute("SELECT id FROM crawldb.page WHERE url = %s", [url])
-    except Exception:
-        logging.error('Error checking for URL duplicates. Could not execute DB check.')
-        cur.close()
-        return None
+    with connection.cursor() as cur:
+        try:
+            cur.execute("SELECT id FROM crawldb.page WHERE url = %s", [url])
+        except Exception:
+            logging.error('Error checking for URL duplicates. Could not execute DB check.')
+            return None
 
-    if cur.fetchall():
-        cur.close()
-        return True
-    cur.close()
-    return False
+        if cur.fetchall():
+            return True
+        return False
 
 
 def html_duplicateCheck(html: BeautifulSoup, connection):
@@ -34,19 +31,16 @@ def html_duplicateCheck(html: BeautifulSoup, connection):
     """
     content = str(html)
     content_hash = hashlib.md5(content.encode()).hexdigest()
-    cur = connection.cursor()
-    try:
-        cur.execute("SELECT id FROM crawldb.page WHERE content_hash = %s", [content_hash])
-    except Exception:
-        logging.error('Error checking for content duplicates. Could not execute DB check.')
-        cur.close()
-        return None
+    with connection.cursor() as cur:
+        try:
+            cur.execute("SELECT id FROM crawldb.page WHERE content_hash = %s", [content_hash])
+        except Exception:
+            logging.error('Error checking for content duplicates. Could not execute DB check.')
+            return None
 
-    if cur.fetchall():
-        cur.close()
-        return True
-    cur.close()
-    return False
+        if cur.fetchall():
+            return True
+        return False
 
 
 # def init_html_hashtable():
