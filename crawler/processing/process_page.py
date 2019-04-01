@@ -102,7 +102,7 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
     return
 
 
-def add_urls_to_frontier(new_urls, conn):
+def add_urls_to_frontier(new_urls, conn, parent_page_id=None):
     for cur_url in new_urls:
         if duplicates.url_duplicateCheck(cur_url, conn):
             continue
@@ -119,6 +119,9 @@ def add_urls_to_frontier(new_urls, conn):
             cur_id = cur.fetchall()[0]
             cur.execute(queries.q['add_to_frontier'], [cur_id])
 
+            if parent_page_id:
+                cur.execute(queries.q['add_pages_to_link'], [parent_page_id, cur_id])
+
 
 def process_page(url: str, conn):
     (page_state, state_arg) = get_page_state(url)
@@ -127,7 +130,7 @@ def process_page(url: str, conn):
         cur.execute("SELECT * from crawldb.page WHERE url = %s", [url])
         page = cur.fetchall()[0]
         page_id = page['id']
-        site_id = page['site_id']
+        # site_id = page['site_id']
 
         if page_state == "error":
             # if page returned error before just remove from frontier, otherwise re-add to frontier & update code
