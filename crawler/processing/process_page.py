@@ -169,6 +169,7 @@ def process_page(url: str, conn):
     if duplicates.html_duplicateCheck(page_body, conn):
         with conn, conn.cursor() as cur:
             cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg, page_id])
+            cur.execute(queries.q['remove_from_frontier'], [page_id])
         return
 
     # parse/process page

@@ -74,6 +74,9 @@ def crawler(conn, crawler_id):
                         cur.execute(queries.q['remove_from_frontier'], [current_page_id])                  # remove from frontier
                     continue
         process_page.process_page(current_url, conn)
+        # remove page from frontier
+        with conn, conn.cursor() as cur:
+            cur.execute(queries.q['remove_from_frontier'], [current_page_id])
 
 
 def start_crawlers(nr_of_threads):
