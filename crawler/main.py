@@ -42,7 +42,7 @@ def get_page_to_process(connection, sleep_time, max_sleeps):
 
 
 def crawler(conn, crawler_id):
-    # check sites if it can be acessed
+    # TODO check sites if it can be acessed
     # -> if yes:
     # consult with robots to add a timestamp to the site database when the domain can be acessed next.
 
@@ -81,9 +81,7 @@ def crawler(conn, crawler_id):
         process_page.process_page(current_url, conn)
 
 
-if __name__ == '__main__':
-    nr_of_threads = int(sys.argv[1])
-
+def start_crawlers(nr_of_threads):
     # INIT
     with psycopg2.connect(user=config.db['username'], password=config.db['password'],
                           host=config.db['host'], port=config.db['port'], database=config.db['db_name']) as connection:
@@ -98,10 +96,17 @@ if __name__ == '__main__':
             cur.execute("UPDATE crawldb.frontier SET occupied=False")
 
     # CRAWL
-    pool = psycopg2.pool.ThreadedConnectionPool(1, nr_of_threads, user=config.db['username'], password=config.db['password'],
-                                                host=config.db['host'], port=config.db['port'], database=config.db['db_name'])
+    db_pool = psycopg2.pool.ThreadedConnectionPool(1, nr_of_threads, user=config.db['username'],
+                                                   password=config.db['password'],
+                                                   host=config.db['host'], port=config.db['port'],
+                                                   database=config.db['db_name'])
     crawlers = []
     for i in range(nr_of_threads):
-        c = threading.Thread(target=crawler, args=(pool.getconn(), i))
+        c = threading.Thread(target=crawler, args=(db_pool.getconn(), i))
         crawlers.append(c)
         c.start()
+
+
+if __name__ == '__main__':
+    nr_of_threads = int(sys.argv[1])
+    start_crawlers(nr_of_threads)
