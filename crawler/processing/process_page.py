@@ -15,7 +15,7 @@ from urllib.parse import quote
 from crawler import config
 from db import queries
 from processing import duplicates
-from processing.robots import add_domain
+# from processing.robots import add_domain
 
 
 def canonicalize_url(url, parent_scheme, parent_host, search_domain=""):
@@ -221,10 +221,10 @@ def process_page(url: str, conn):
         cur_split_url = urltools.split(cur_url)
         cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_split_url.netloc])
         cur_site_id = cur.fetchall()
-        if not cur_site_id:
-            cur_site_id = add_domain(cur_split_url.netloc, conn)    # add domain if doesn't exists yet
-        else:
-            cur_site_id = cur_site_id[0]
+        # if not cur_site_id:
+        #     cur_site_id = add_domain(cur_split_url.netloc, conn)    # add domain if doesn't exists yet
+        # else:
+        #     cur_site_id = cur_site_id[0]
 
         cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
         cur_id = cur.fetchall()[0]

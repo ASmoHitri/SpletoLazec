@@ -1,8 +1,10 @@
 import sys
 import time
-import psycopg2
 import threading
 import logging
+import psycopg2
+from psycopg2 import pool
+from psycopg2 import extras
 
 import config
 from processing import process_page, robots
@@ -25,14 +27,23 @@ def crawler(conn, crawler_id):
     #  and get the next page in line and repeat the process, untill you find a valid page..
     # when we have a page we can process_page()
     # cur = conn.cursor()
-    #
+
+    # # DB TEST
+    # with conn.cursor() as cursor:
+    #     cursor.execute("insert into crawldb.site (\"domain\") VALUES ('moja domena')")
+    #     conn.commit
+    #     cursor.execute("SELECT * from crawldb.site where domain=%s", ['moja domena'])
+    #     res = cursor.fetchall()
+    #     conn.commit()
+    # print(res)
+    # return
     consecutive_sleeps = 0
     max_sleeps = 5
     sleep_time = 60     # sleep in seconds
     while True: # TODO kaksen bo pogoj?
         # get next URL from frontier
-        cur = conn.cursor()
-        cur.exec(queries.q['get_url_from_frontier'])
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute(queries.q['get_url_id_from_frontier'])
         urls = cur.fetchall()
         if not urls:
             if consecutive_sleeps >= max_sleeps:
@@ -45,16 +56,21 @@ def crawler(conn, crawler_id):
             time.sleep(sleep_time)
             continue
 
+        # mark page as occupied in frontier
+        cur.execute(queries.q['update_frontier_page_occ'])
+        cur.commit()
+
         consecutive_sleeps = 0      # reset consecutive sleeps counter
-        current_url = urls[0]
+        cur.exec(queries.q['get_page_by_id'], [urls[0]['id']])
+        current_page = cur.fetchone()
+        current_url = current_page['url']
         # check with robots if URL can be fetched
 
-
-
+        cur.close()
 
 
 if __name__ == '__main__':
-    nr_of_threads = sys.argv[1]
+    nr_of_threads = int(sys.argv[1])
     pool = psycopg2.pool.ThreadedConnectionPool(1, nr_of_threads, user=config.db['username'], password=config.db['password'],
                                                 host=config.db['host'], port=config.db['port'], database=config.db['db_name'])
 
