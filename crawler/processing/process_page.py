@@ -12,8 +12,10 @@ from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
 from urllib.parse import quote
-# from robots import add_domain
+
 import config
+from processing.robots import add_domain
+from db import queries
 
 
 def canonicalize_url(url, parent_scheme, parent_host, search_domain=""):
@@ -121,9 +123,8 @@ def get_page_state(url):
     """
     Checks page's current state by sending HTTP HEAD request
     :param url: Request URL
-    :return: ("ok", return_code: int) if request successful and not redirected,
+    :return: ("ok", return_code: int) if request successful,
              ("error", return_code: int) if error response code,
-             ("redirected", ending_url: str) if request successful but redirected,
              (None, error_message: str) if page fetching failed (timeout, invalid URL, ...)
     """
 
@@ -133,41 +134,42 @@ def get_page_state(url):
         logging.error(exception)
         return None, "Error fetching page"
 
-    # print(response.history)
-    # TODO check why history always empty!
-    if response.history:
-        return "redirected", response.url
     if response.status_code >= 400:
         return "error", response.status_code
     return "ok", response.status_code
 
 
-def get_files(parentUrl: str, urls_img: list, urls_binary: list, conn):
+def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
     """
-    :param soup: BeautifulSoup of the web page content you want to extract image files from.
-    :param parentUrl: url of the page we are currently processing, for page_id
-    :param urls: A list of binary file urls, gotten with get_page_urls
+    :param parent_url: url of the page we are currently processing, for page_id
+    :param urls_img: A list of img files to load (to DB)
+    :param urls_binary: A list of binary files to load (to DB)
     :param conn: a psycopg2 connection with which we insert files into our database
     :return:
     """
+
+    # get parent page id from database
     cur = conn.cursor()
-    cur.execute("SELECT page_id FROM crawldb.page WHERE url = '%s'" % parentUrl)
+    cur.execute("SELECT page_id FROM crawldb.page WHERE url = '%s'" % parent_url)
     page_id = cur.fetchall()
-    page_id = page_id[0]
+    if page_id:
+        page_id = page_id[0]
+    else:
+        logging.error("Error fetching files. Couldn't get parent URL's id form DB.")
+
     for url in urls_binary:
         data_type_code = (url.split('.')[-1]).upper()
         r = requests.get(url, stream=True)
         content = r.raw_read(10000000)  # tu mozno se potreben decode
-        cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)", [
-            page_id, data_type_code, psycopg2.Binary(content)])
+        cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
+                    [page_id, data_type_code, psycopg2.Binary(content)])
         cur.commit()
-    # for el in soup.find_all('img'):
-    #     url = el['src']
+
     for url in urls_img:
-        # TODO assuming we can canonicalize the url:
+        # TODO saving images to disk?
         split = url.split('.')
-        filename = split[0]
-        content_type = split[1]
+        filename = "".join(split[:-1])
+        content_type = split[-1].lower()
         if content_type in {'img', 'png', 'jpg'}:
             r = requests.get(url, stream=True)
             content = r.raw_read(10000000)
@@ -180,60 +182,42 @@ def get_files(parentUrl: str, urls_img: list, urls_binary: list, conn):
 
 def process_page(url: str, conn):
     (page_state, arg) = get_page_state(url)
-    page_body = fetch_data(url)
-    split_url = urltools.split(url)
-    url_scheme = split_url.scheme
-    url_netloc = split_url.netloc
-    get_page_urls(page_body, url_scheme, url_netloc)
 
-    return
     cur = conn.cursor()
-
-    cur.execture("SELECT id from crawldb.page WHERE url = %s", [url])
-    page_id = cur.fetchall()[0]
+    cur.execute("SELECT id, site_id from crawldb.page WHERE url = %s", [url])
+    (page_id, site_id) = cur.fetchall()[0]
 
     if page_state == "error":
-        # TODO save page to database
-        # ce dodamo error kot page_type lahko skoraj skopiramo iz duplicates naprej.
-        # TODO ('site' saving has to be implemented/merged first (@Jan?))
+        change_http_status_query = "UPDATE crawldb.page SET http_status_code=%s, accessed_time=NOW()"
+        cur.execute(change_http_status_query, [arg])        # TODO je treba popraviti frontier?
+        cur.commit()
         return
     elif page_state is None:
-        # TODO handle pages that couldn't be fetched (se jih samo preskoci / pogleda kasneje?)
+        # failed to fetch page -> re-add page to frontier
+        cur.execute(queries.q['remove_from_frontier'], [page_id])
+        cur.commit()
+        cur.execute(queries.q['add_to_frontier'], [page_id])
         return
 
     split_url = urltools.split(url)
     url_scheme = split_url.scheme
     url_netloc = split_url.netloc
 
-    if page_state == "redirected":
-        # Q: what if return value None?? (zaradi domene)
-        end_page = canonicalize_url(arg, url_scheme, url_netloc, config.search_domain)
-        (page_state, arg) = get_page_state(end_page)
-        if duplicates.url_duplicateCheck(end_page, conn):
-            cur.execute("UPDATE crawldb.page SET page_type_code = %s, http_status_code = %s, accessed_time = %s WHERE id = %s", [
-                        'DUPLICATE', arg, datetime.now(), page_id])
-            cur.commit()
-            cur.close()
-            return
-        else:
-            url = end_page  # QUESTION ali spremenimo tu url?
-        # kaj naredimo else?
+    # if page_state == "redirected":
+    #     # Q: what if return value None?? (zaradi domene)
+    #     end_page = canonicalize_url(arg, url_scheme, url_netloc, config.search_domain)
+    #     (page_state, arg) = get_page_state(end_page)
+    #     if duplicates.url_duplicateCheck(end_page, conn):
+    #         cur.execute("UPDATE crawldb.page SET page_type_code = %s, http_status_code = %s, accessed_time = %s WHERE id = %s", [
+    #                     'DUPLICATE', arg, datetime.now(), page_id])
+    #         cur.commit()
+    #         cur.close()
+    #         return
+    #     else:
+    #         url = end_page  # QUESTION ali spremenimo tu url?
+    #     # kaj naredimo else?
 
     page_body = fetch_data(url)
-    # pridobimo podatke o domeni
-    # tu se zaradi redirecta lahko zgodi, da še nimamo domene? pod kateri url shranjujemo redirectano stran?
-    cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [url_netloc])
-    site_id = cur.fetchall()[0]
-
-    # sledece se verjetno ne mora zgoditi razen pri redirectih?
-
-    # if not site_id:
-    #     cur.execute(
-    #         "INSERT into crawldb.site (\"domain\", robots_content, sitemap_content, next_acces, delay)", [url_netloc, ??, ??, ??, ??])
-    #     cur.commit()
-    # else:
-    #     site_id = site_id[0]
-
     if duplicates.html_duplicateCheck(page_body, conn):
         cur.execute(
             "INSERT into crawldb.page (site_id, page_type_code, url, html_content, http_status_code, accessed_time)",
@@ -288,6 +272,6 @@ if __name__ == '__main__':
     # str1 = re.search("doc", str)
     # print(str1.group(0))
 
-    page = "hp://nevemmms"
-    print(fetch_data(page))
+
+
 

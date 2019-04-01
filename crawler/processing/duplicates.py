@@ -1,62 +1,52 @@
-from bs4 import BeautifulSoup
-# QUESTION drugace, kot da dodam sledeci dve vrstici ne znam importat configa.
-# import sys
-# sys.path.insert(0, "/Users/Gal/Desktop/ISRM/FRI/IEPS/SpletoLazec/crawler/")
-import config
 import psycopg2
 import hashlib
-# import urltools
-# import urllib
+import logging
+from bs4 import BeautifulSoup
+from crawler import config
 
 
 def url_duplicateCheck(url, connection):
     """
     :param url: URL to check (string, canonicalized)
     :param connection: psycopg2 connection
-    :return: isDuplicate(boolean) or None if check unsucessful
+    :return: isDuplicate(boolean) or None if check unsuccessful
     """
     cur = connection.cursor()
     try:
         cur.execute("SELECT id FROM crawldb.page WHERE url = %s", [url])
-        # QUESTION pravo poimentovanje tabele?
-        # Assumes urls in database are canonicalized.
-    except:
-        print('could not execute check')
+    except Exception:
+        logging.error('Error checking for URL duplicates. Could not execute DB check.')
         cur.close()
         return None
 
-    if not cur.fetchall():
-        cur.close()
-        return False
-    else:
+    if cur.fetchall():
         cur.close()
         return True
+    cur.close()
+    return False
 
 
 def html_duplicateCheck(html: BeautifulSoup, connection):
     """
     :param html: html content in the form of a BeautifulSoup
     :param connection: psycopg2 connection
-    :return: isDuplicate(boolean) or None if check unsucessful
+    :return: isDuplicate(boolean) or None if check unsuccessful
     """
     content = str(html)
-    # QUESTION ali content = html.prettify()? kako bomo dajali v bazo
-    content_hash = hashlib.md5(content)
+    content_hash = hashlib.md5(content.encode()).hexdigest()
     cur = connection.cursor()
     try:
         cur.execute("SELECT id FROM crawldb.page WHERE content_hash = %s", [content_hash])
-        # QUESTION pravo poimentovanje tabele?
-    except:
-        print('could not execute check')
+    except Exception:
+        logging.error('Error checking for content duplicates. Could not execute DB check.')
         cur.close()
         return None
 
-    if not cur.fetchall():
-        cur.close()
-        return False
-    else:
+    if cur.fetchall():
         cur.close()
         return True
+    cur.close()
+    return False
 
 
 # def init_html_hashtable():

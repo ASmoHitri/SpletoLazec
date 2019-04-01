@@ -12,10 +12,10 @@ CREATE TABLE crawldb.page_type (
 
 CREATE TABLE crawldb.site (
 	id                   serial  NOT NULL,
-	"domain"             varchar(500)  ,
-	robots_content       text  ,
-	sitemap_content      text  ,
-	next_acces					 timestamp,
+	"domain"             varchar(500),
+	robots_content       text,
+	sitemap_content      text,
+	next_acces			  timestamp,
 	delay                smallint,
 
 	CONSTRAINT pk_site_id PRIMARY KEY ( id )
@@ -23,12 +23,13 @@ CREATE TABLE crawldb.site (
 
 CREATE TABLE crawldb.page (
 	id                   serial  NOT NULL,
-	site_id              integer  ,
-	page_type_code       varchar(20)  ,
-	url                  varchar(3000)  ,
-	html_content         text  ,
-	http_status_code     integer  ,
-	accessed_time        timestamp  ,
+	site_id              integer,
+	page_type_code       varchar(20),
+	url                  varchar(3000),
+	html_content         text,
+	http_status_code     integer,
+	accessed_time        timestamp,
+	content_hash         varchar(64),
 	CONSTRAINT pk_page_id PRIMARY KEY ( id ),
 	CONSTRAINT unq_url_idx UNIQUE ( url )
  );
@@ -68,9 +69,9 @@ CREATE TABLE crawldb.link (
  );
 
  CREATE TABLE crawldb.frontier (
-	page_id 							integer PRIMARY KEY REFERENCES crawldb.page(id),
-	time_added						timestamp DEFAULT Now(),
-	occupied							boolean DEFAULT False
+	page_id 			  integer PRIMARY KEY REFERENCES crawldb.page(id),
+	time_added			  timestamp DEFAULT NOW(),
+	occupied			  boolean DEFAULT False
  );
 
 CREATE INDEX "idx_link_from_page" ON crawldb.link ( from_page );
