@@ -72,7 +72,7 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
     """
 
     # get parent page id from database
-    with conn.cursor() as cur:
+    with conn, conn.cursor() as cur:
         cur.execute("SELECT page_id FROM crawldb.page WHERE url = '%s'" % parent_url)
         page_id = cur.fetchall()
     if page_id:
@@ -84,7 +84,7 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
         data_type_code = (url.split('.')[-1]).upper()
         r = requests.get(url, stream=True)
         content = r.raw_read(10000000)  # TODO tu mozno se potreben decode
-        with conn.cursor() as cur:
+        with conn, conn.cursor() as cur:
             cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
                         [page_id, data_type_code, psycopg2.Binary(content)])
 
@@ -95,7 +95,7 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
         if content_type in {'img', 'png', 'jpg'}:
             r = requests.get(url, stream=True)
             content = r.raw_read(10000000)
-            with conn.cursor() as cur:
+            with conn, conn.cursor() as cur:
                 cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) \
                              VALUES (%s, %s, %s, %s, %s)",
                             [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
@@ -103,7 +103,6 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
 
 
 def add_urls_to_frontier(new_urls, conn, parent_page_id=None):
-    # connection = db_pool.getconn()
     for cur_url in new_urls:
         if duplicates.url_duplicateCheck(cur_url, conn):
             continue
@@ -119,8 +118,9 @@ def add_urls_to_frontier(new_urls, conn, parent_page_id=None):
         with conn, conn.cursor() as cur:
             cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
             cur_id = cur.fetchall()[0]
+        with conn, conn.cursor() as cur:
             cur.execute(queries.q['add_to_frontier'], [cur_id])
-
+        with conn, conn.cursor() as cur:
             if parent_page_id:
                 cur.execute(queries.q['add_pages_to_link'], [parent_page_id, cur_id])
 
@@ -128,32 +128,37 @@ def add_urls_to_frontier(new_urls, conn, parent_page_id=None):
 def process_page(url: str, conn):
     (page_state, state_arg) = get_page_state(url)
 
-    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+    with conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
         cur.execute("SELECT * from crawldb.page WHERE url = %s", [url])
         page = cur.fetchall()[0]
         page_id = page['id']
         # site_id = page['site_id']
 
-        if page_state == "error":
-            # if page returned error before just remove from frontier, otherwise re-add to frontier & update code
+    if page_state == "error":
+        # if page returned error before just remove from frontier, otherwise re-add to frontier & update code
+        with conn, conn.cursor():
             cur.execute(queries.q['remove_from_frontier'], [page_id])
-            if page['http_status_code']:
-                page_type = 'HTML'
-            else:
-                page_type = 'FRONTIER'
+        if page['http_status_code']:
+            page_type = 'HTML'
+        else:
+            page_type = 'FRONTIER'
+            with conn, conn.cursor():
                 cur.execute(queries.q['add_to_frontier'], [page_id])
+        with conn, conn.cursor():
             cur.execute(queries.q['update_page_codes'], [page_type, state_arg, page_id])
-            return
-        elif page_state is None:
-            # failed to fetch page -> re-add page to frontier
+        return
+    elif page_state is None:
+        # failed to fetch page -> re-add page to frontier
+        with conn, conn.cursor():
             cur.execute(queries.q['remove_from_frontier'], [page_id])
+        with conn, conn.cursor():
             cur.execute(queries.q['add_to_frontier'], [page_id])
-            return
+        return
 
     page_body = fetch_data(url)
     # handle content duplicates
     if duplicates.html_duplicateCheck(page_body, conn):
-        with conn.cursor() as cur:
+        with conn, conn.cursor() as cur:
             cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg, page_id])
         return
 
@@ -167,7 +172,7 @@ def process_page(url: str, conn):
     add_urls_to_frontier(new_urls, conn, page_id)
 
     # mark page as crawled
-    with conn.cursor() as cur:
+    with conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE crawldb.page \
             SET page_type_code=%s, html_content=%s, http_status_code=%s, accessed_time=NOW() \
