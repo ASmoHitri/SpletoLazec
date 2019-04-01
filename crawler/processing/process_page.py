@@ -162,7 +162,7 @@ def process_page(url: str, conn):
     new_urls, binary_urls, img_urls = process_helpers.get_page_urls(page_body, url_scheme, url_netloc, config.search_domain)
 
     get_files(url, img_urls, binary_urls, conn)
-    add_urls_to_frontier(new_urls, conn)
+    add_urls_to_frontier(new_urls, conn, page_id)
 
     # mark page as crawled
     with conn.cursor() as cur:
