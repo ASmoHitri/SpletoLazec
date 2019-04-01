@@ -3,7 +3,6 @@ import re
 import logging
 import requests
 import psycopg2
-import duplicates
 from datetime import datetime
 
 import urltools
@@ -13,9 +12,10 @@ from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
 from urllib.parse import quote
 
-import config
-from processing.robots import add_domain
+from crawler import config
 from db import queries
+from processing import duplicates
+from processing.robots import add_domain
 
 
 def canonicalize_url(url, parent_scheme, parent_host, search_domain=""):
@@ -181,15 +181,15 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
 
 
 def process_page(url: str, conn):
-    (page_state, arg) = get_page_state(url)
+    (page_state, state_arg) = get_page_state(url)
 
     cur = conn.cursor()
     cur.execute("SELECT id, site_id from crawldb.page WHERE url = %s", [url])
     (page_id, site_id) = cur.fetchall()[0]
 
     if page_state == "error":
-        change_http_status_query = "UPDATE crawldb.page SET http_status_code=%s, accessed_time=NOW()"
-        cur.execute(change_http_status_query, [arg])        # TODO je treba popraviti frontier?
+        change_http_status_query = "UPDATE crawldb.page SET http_status_code=%s, accessed_time=NOW() WHERE id=%s"
+        cur.execute(change_http_status_query, [state_arg, page_id])        # TODO je treba popraviti frontier?
         cur.commit()
         return
     elif page_state is None:
@@ -199,78 +199,58 @@ def process_page(url: str, conn):
         cur.execute(queries.q['add_to_frontier'], [page_id])
         return
 
-    split_url = urltools.split(url)
-    url_scheme = split_url.scheme
-    url_netloc = split_url.netloc
-
-    # if page_state == "redirected":
-    #     # Q: what if return value None?? (zaradi domene)
-    #     end_page = canonicalize_url(arg, url_scheme, url_netloc, config.search_domain)
-    #     (page_state, arg) = get_page_state(end_page)
-    #     if duplicates.url_duplicateCheck(end_page, conn):
-    #         cur.execute("UPDATE crawldb.page SET page_type_code = %s, http_status_code = %s, accessed_time = %s WHERE id = %s", [
-    #                     'DUPLICATE', arg, datetime.now(), page_id])
-    #         cur.commit()
-    #         cur.close()
-    #         return
-    #     else:
-    #         url = end_page  # QUESTION ali spremenimo tu url?
-    #     # kaj naredimo else?
-
     page_body = fetch_data(url)
+    # handle content duplicates
     if duplicates.html_duplicateCheck(page_body, conn):
-        cur.execute(
-            "INSERT into crawldb.page (site_id, page_type_code, url, html_content, http_status_code, accessed_time)",
-            [site_id, 'DUPLICATE', url, page_body, arg, datetime.now()])
+        cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg])
         cur.commit()
         cur.close()
         return
 
-    # naredimu update na crawldb.page, zato najprej rabimo page_id
-    cur.execute("UPDATE crawldb.page SET page_type_code = %s, html_content = %s, http_status_code = %s, accessed_time = %s WHERE id = %s", [
-                'HTML', page_body, arg, datetime.now(), page_id])
-    cur.commit()
-    new_urls, binary_urls, img_urls = get_page_urls(
-        page_body, url_scheme, url_netloc, config.search_domain)
+    # parse/process page
+    split_url = urltools.split(url)
+    url_scheme = split_url.scheme
+    url_netloc = split_url.netloc
+    new_urls, binary_urls, img_urls = get_page_urls(page_body, url_scheme, url_netloc, config.search_domain)
 
     get_files(url, img_urls, binary_urls, conn)
 
     for cur_url in new_urls:
-        cur_split_url = urltools.split(cur_url)
-        cur_url_scheme = cur_split_url.scheme
-        cur_url_netloc = cur_split_url.netloc
-        cur_canon_url = canonicalize_url(
-            cur_url, cur_url_scheme, cur_url_netloc, config.search_domain)
-        if duplicates.url_duplicateCheck(cur_canon_url, conn):
+        if duplicates.url_duplicateCheck(cur_url, conn):
             continue
-        cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_url_netloc])
+        cur_split_url = urltools.split(cur_url)
+        cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_split_url.netloc])
         cur_site_id = cur.fetchall()
-        if not cur_site_id:  # ce domene se ni v bazi
-            cur_site_id = add_domain(cur_url_netloc, conn)
+        if not cur_site_id:
+            cur_site_id = add_domain(cur_split_url.netloc, conn)    # add domain if doesn't exists yet
         else:
             cur_site_id = cur_site_id[0]
 
-        cur.execute("INSERT INTO crawldb.page (site_id, page_type_code, url, accessed_time) RETURNING id", [
-                    cur_site_id, 'FRONTIER', cur_canon_url,  datetime.now()])
+        cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
         cur_id = cur.fetchall()[0]
-        cur.execute("INSERT INTO crawldb.frontier (page_id)", [cur_id])
+        cur.execute(queries.q['add_to_frontier'], [cur_id])
         cur.commit()
+
+    # mark page as crawled
+    cur.execute(
+        "UPDATE crawldb.page SET page_type_code=%s, html_content=%s, http_status_code=%s, accessed_time=NOW() WHERE id=%s",
+        ['HTML', page_body, state_arg, page_id])
+    cur.commit()
     cur.close()
-    # TODO nekam je treba vkljuciti se robots/sitemap zadeve (@Jan?)
 
 
 if __name__ == '__main__':
     # # url1 = "http://dev.vitabits.org"  # should redirect!?!
-    # url1 = "http://podatki.gov.si"
+    url1 = "http://podatki.gov.si"
     # # soup = BeautifulSoup(requests.get(url1).text, features="html.parser")
     # # soup.find_all('img')[0]['src']
     #
     # # fetch_data(url1)
-    # process_page(url1)
-    # print("zacetek")
-    # str = "doc.min.oiiof"
-    # str1 = re.search("doc", str)
-    # print(str1.group(0))
+    process_page(url1)
+    print("zacetek")
+    str = "doc.min.oiiof"
+    str1 = re.search("doc", str)
+    print(str1.group(0))
 
 
 
