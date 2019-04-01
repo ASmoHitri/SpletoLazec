@@ -41,7 +41,7 @@ def process_sitemap(s):
     :param s: Sitemap content in xml format
     :return: A list of URLs of all the web sites listed in site map
     """
-    soup = BeautifulSoup(s)
+    soup = BeautifulSoup(s,features='html.parser')
     result = []
 
     for loc in soup.findAll('loc'):
@@ -82,13 +82,13 @@ def can_fetch_page(url, conn):
     split_url = urltools.split(url)
     parent_scheme = split_url.scheme
     domain = split_url.netloc
-    #TODO: potrebno poraviti še can_fetch_page
-    with conn.cursor() as curs:
-        #preverimo, če je domena že v bazi
-        curs.execute("SELECT robots_content FROM crawldb.site WHERE domain = '%s'" % domain)
-        robots_content = curs.fetchone()
 
-        #če domene še ni v bazi
+    with conn.cursor() as curs:
+        #vzamemo robots content
+        curs.execute("SELECT id, robots_content, next_acces, delay FROM crawldb.site WHERE domain = '%s'" % domain)
+        site_id, robots_content, acces_time, delay = curs.fetchone()
+
+        #če domene v bazi še nima robots_content
         if  robots_content == None:
             robots_content, sitemap_content = get_robots_content(domain)
 
@@ -103,7 +103,9 @@ def can_fetch_page(url, conn):
                     delay = rp.crawl_delay("*")
                 except:
                     delay = 4
+             #v primeru, da je robots_prazen ga nastavimo na prazen niz ""
             else:
+                robots_content = ""
                 can_fetch = True
                 delay = 4
 
@@ -113,12 +115,15 @@ def can_fetch_page(url, conn):
 
             #definiramo next_acces time
             next_acces_time = datetime.fromtimestamp(time.time() + delay)
-
-            # dodamo domeno v bazo
-            curs.execute(
-                "INSERT into crawldb.site (domain , robots_content, sitemap_content, next_acces, delay) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                (domain, robots_content, sitemap_content, next_acces_time, delay))
-            site_id = curs.fetchone()[0]
+            # domeno v bazi posodobimo
+            sql = """ UPDATE crawldb.site
+                      SET robots_content = %s,
+                          sitemap_content = %s,
+                          next_acces = %s,
+                          delay = %s
+                      WHERE domain = %s"""
+            curs.execute(sql,
+                (robots_content, sitemap_content, next_acces_time, delay, domain))
 
             # v primeru, da sitemap ni prazen dodamo vse strani v frontier
             if sitemap_content:
@@ -128,41 +133,36 @@ def can_fetch_page(url, conn):
                     if cannon_site == None:
                         continue
                     # če se stran še ni pojavila jo dodamo v bazo
-                    if url_duplicateCheck(cannon_site, conn):
+                    if not url_duplicateCheck(cannon_site, conn):
                         curs.execute(
-                            "INSERT INTO crawldb.page (site_id, page_type_code,url, accesed_time) RETURNING id",
+                            "INSERT INTO crawldb.page (site_id, page_type_code,url, accessed_time) VALUES (%s, %s, %s, %s) RETURNING id",
                             [site_id, 'FRONTIER', cannon_site, datetime.now()])
-                        cur_id = curs.fetchone()
-                        curs.execute("INSERT INTO crawldb.frontier (page_id)", [cur_id])
+                        cur_id = curs.fetchone()[0]
+                        curs.execute("INSERT INTO crawldb.frontier (page_id) VALUES (%s)", [cur_id])
                     else:
                         continue
 
             if can_fetch:
-                return (site_id, True, False, False)
+                return (True, False)
             else:
-                return (site_id, False, False, True)
+                return (False, False)
 
-        #če je domena že v bazi, izberemo robots content
+        #če robots.txt ni None (!= None)
         else:
-            site_id = existing_domain[0]
-            robots_content = existing_domain[1]
-            acces_time = datetime.timestamp(existing_domain[2])
-            delay = existing_domain[3]
-
             # informacije o robots.txt
             #če je prazen robots, preverimo samo delay
-            if not robots_content:
+            if robots_content == "":
                 visit_time = time.time()
-                if visit_time >= acces_time:
+                if visit_time >= acces_time.timestamp():
                     next_acces_update = datetime.fromtimestamp(delay + visit_time)
                     #posodobimo next_acces za domeno
                     sql = """ UPDATE crawldb.site
                                         SET next_acces = %s
                                         WHERE domain = %s"""
                     curs.execute(sql, (next_acces_update, domain))
-                    return (site_id, True, False, False)
+                    return (True, False)
                 else:
-                    return (site_id, False, True, False)
+                    return (False, True)
             else:
                 #robot parser
                 rp = urllib.robotparser.RobotFileParser()
@@ -171,7 +171,7 @@ def can_fetch_page(url, conn):
                 can_fetch = rp.can_fetch("*",url)
                 if can_fetch:
                     visit_time = time.time()
-                    if visit_time >= acces_time:
+                    if visit_time >= acces_time.timestamp():
                         next_acces_update = datetime.fromtimestamp(delay + visit_time)
 
                         #update next_acces
@@ -180,11 +180,11 @@ def can_fetch_page(url, conn):
                                      WHERE domain = %s"""
                         curs.execute(sql, (next_acces_update,domain))
 
-                        return (site_id, True, False, False)
+                        return (True, False)
                     else:
-                        return (site_id, False, True, False)
+                        return (False, True)
                 else:
-                    return (site_id, False, False, True)
+                    return (False, False)
 
 #funkcija add domain prejme domeno, ki ni v bazi
 #doda domeno v bazo in vrne site_id
@@ -203,12 +203,12 @@ def add_domain(domain, conn):
     return site_id
 
 
-#TEST
-#definiramo seznam začetnih spletnih mest za katere bomo pobrali robots.txt in parsali sitemapa, če jih vsebujejo
-# ss = ["http://evem.gov.si", "http://e-uprava.gov.si","http://podatki.gov.si","http://e-prostor.gov.si"]
-#
-#
-#
+# TEST
+# definiramo seznam začetnih spletnih mest za katere bomo pobrali robots.txt in parsali sitemapa, če jih vsebujejo
+ss = ["http://evem.gov.si", "http://e-uprava.gov.si","http://podatki.gov.si","http://e-prostor.gov.si"]
+
+
+
 # import  psycopg2
 # from config import *
 #
@@ -229,12 +229,20 @@ def add_domain(domain, conn):
 #         curs.execute("SELECT * FROM crawldb.site")
 #         data = curs.fetchall()
 # data
+#
 # with conn:
 #     with conn.cursor() as curs:
 #         curs.execute("TRUNCATE crawldb.site CASCADE")
-
-
-
+#
+#
+# for site in ss:
+#     split_url = urltools.split(site)
+#     domain = split_url.netloc
+#     add_domain(domain,conn)
+#
+# for site in ss:
+#     print(can_fetch_page(site, conn))
+#
 
 
 
