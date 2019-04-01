@@ -75,8 +75,7 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
     img_regex = ".(png|PNG|img|IMG|jp(e)?g|JP(E)?G)$"
     for link in page_data.find_all("img"):
         url = link["src"]
-        canon_url = canonicalize_url(url, parent_scheme,
-                                     parent_host)  # TODO Q: ali tudi slike samo tiste ki v pravi domeni?
+        canon_url = canonicalize_url(url, parent_scheme, parent_host)
         if canon_url and re.search(img_regex, canon_url):
             img_urls.append(canon_url)
 

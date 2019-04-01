@@ -2,6 +2,7 @@ import os
 import logging
 import requests
 import psycopg2
+import psycopg2.extras
 from datetime import datetime
 
 import urltools
@@ -71,9 +72,9 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
     """
 
     # get parent page id from database
-    cur = conn.cursor()
-    cur.execute("SELECT page_id FROM crawldb.page WHERE url = '%s'" % parent_url)
-    page_id = cur.fetchall()
+    with conn.cursor() as cur:
+        cur.execute("SELECT page_id FROM crawldb.page WHERE url = '%s'" % parent_url)
+        page_id = cur.fetchall()
     if page_id:
         page_id = page_id[0]
     else:
@@ -82,51 +83,55 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
     for url in urls_binary:
         data_type_code = (url.split('.')[-1]).upper()
         r = requests.get(url, stream=True)
-        content = r.raw_read(10000000)  # tu mozno se potreben decode
-        cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
-                    [page_id, data_type_code, psycopg2.Binary(content)])
-        cur.commit()
+        content = r.raw_read(10000000)  # TODO tu mozno se potreben decode
+        with conn.cursor() as cur:
+            cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
+                        [page_id, data_type_code, psycopg2.Binary(content)])
 
     for url in urls_img:
-        # TODO saving images to disk?
         split = url.split('.')
         filename = "".join(split[:-1])
         content_type = split[-1].lower()
         if content_type in {'img', 'png', 'jpg'}:
             r = requests.get(url, stream=True)
             content = r.raw_read(10000000)
-            cur.execute("INSERT into crawldb.image (page_id, filename, content_type, \"data\", accessed_time) VALUES (%s, %s, %s, %s, %s)",
-                        [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
-            cur.commit()
-    cur.close()
+            with conn.cursor() as cur:
+                cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) \
+                             VALUES (%s, %s, %s, %s, %s)",
+                            [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
     return
 
 
 def process_page(url: str, conn):
     (page_state, state_arg) = get_page_state(url)
 
-    cur = conn.cursor()
-    cur.execute("SELECT id, site_id from crawldb.page WHERE url = %s", [url])
-    (page_id, site_id) = cur.fetchall()[0]
+    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+        cur.execute("SELECT * from crawldb.page WHERE url = %s", [url])
+        page = cur.fetchall()[0]
+        page_id = page['id']
+        site_id = page['site_id']
 
-    if page_state == "error":
-        change_http_status_query = "UPDATE crawldb.page SET http_status_code=%s, accessed_time=NOW() WHERE id=%s"
-        cur.execute(change_http_status_query, [state_arg, page_id])        # TODO je treba popraviti frontier?
-        cur.commit()
-        return
-    elif page_state is None:
-        # failed to fetch page -> re-add page to frontier
-        cur.execute(queries.q['remove_from_frontier'], [page_id])
-        cur.commit()
-        cur.execute(queries.q['add_to_frontier'], [page_id])
-        return
+        if page_state == "error":
+            # if page returned error before just remove from frontier, otherwise re-add to frontier & update code
+            cur.execute(queries.q['remove_from_frontier'], [page_id])
+            if page['http_status_code']:
+                page_type = 'HTML'
+            else:
+                page_type = 'FRONTIER'
+                cur.execute(queries.q['add_to_frontier'], [page_id])
+            cur.execute(queries.q['update_page_codes'], [page_type, state_arg, page_id])
+            return
+        elif page_state is None:
+            # failed to fetch page -> re-add page to frontier
+            cur.execute(queries.q['remove_from_frontier'], [page_id])
+            cur.execute(queries.q['add_to_frontier'], [page_id])
+            return
 
     page_body = fetch_data(url)
     # handle content duplicates
     if duplicates.html_duplicateCheck(page_body, conn):
-        cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg, page_id])
-        cur.commit()
-        cur.close()
+        with conn.cursor() as cur:
+            cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg, page_id])
         return
 
     # parse/process page
@@ -141,21 +146,22 @@ def process_page(url: str, conn):
         if duplicates.url_duplicateCheck(cur_url, conn):
             continue
         cur_split_url = urltools.split(cur_url)
-        cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_split_url.netloc])
-        cur_site_id = cur.fetchall()
-        if not cur_site_id:
-            cur_site_id = add_domain(cur_split_url.netloc, conn)    # add domain if doesn't exists yet
-        else:
-            cur_site_id = cur_site_id[0]
+        with conn.cursor() as cur:
+            cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_split_url.netloc])
+            cur_site_id = cur.fetchall()
+            if not cur_site_id:
+                cur_site_id = add_domain(cur_split_url.netloc, conn)    # add domain if doesn't exists yet
+            else:
+                cur_site_id = cur_site_id[0]
 
-        cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
-        cur_id = cur.fetchall()[0]
-        cur.execute(queries.q['add_to_frontier'], [cur_id])
-        cur.commit()
+            cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
+            cur_id = cur.fetchall()[0]
+            cur.execute(queries.q['add_to_frontier'], [cur_id])
 
     # mark page as crawled
-    cur.execute(
-        "UPDATE crawldb.page SET page_type_code=%s, html_content=%s, http_status_code=%s, accessed_time=NOW() WHERE id=%s",
-        ['HTML', page_body, state_arg, page_id])
-    cur.commit()
-    cur.close()
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE crawldb.page \
+            SET page_type_code=%s, html_content=%s, http_status_code=%s, accessed_time=NOW() \
+            WHERE id=%s",
+            ['HTML', page_body, state_arg, page_id])
