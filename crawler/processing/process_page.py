@@ -102,6 +102,24 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
     return
 
 
+def add_urls_to_frontier(new_urls, conn):
+    for cur_url in new_urls:
+        if duplicates.url_duplicateCheck(cur_url, conn):
+            continue
+        cur_split_url = urltools.split(cur_url)
+        with conn.cursor() as cur:
+            cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_split_url.netloc])
+            cur_site_id = cur.fetchall()
+            if not cur_site_id:
+                cur_site_id = add_domain(cur_split_url.netloc, conn)    # add domain if doesn't exists yet
+            else:
+                cur_site_id = cur_site_id[0]
+
+            cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
+            cur_id = cur.fetchall()[0]
+            cur.execute(queries.q['add_to_frontier'], [cur_id])
+
+
 def process_page(url: str, conn):
     (page_state, state_arg) = get_page_state(url)
 
@@ -141,22 +159,7 @@ def process_page(url: str, conn):
     new_urls, binary_urls, img_urls = process_helpers.get_page_urls(page_body, url_scheme, url_netloc, config.search_domain)
 
     get_files(url, img_urls, binary_urls, conn)
-
-    for cur_url in new_urls:
-        if duplicates.url_duplicateCheck(cur_url, conn):
-            continue
-        cur_split_url = urltools.split(cur_url)
-        with conn.cursor() as cur:
-            cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_split_url.netloc])
-            cur_site_id = cur.fetchall()
-            if not cur_site_id:
-                cur_site_id = add_domain(cur_split_url.netloc, conn)    # add domain if doesn't exists yet
-            else:
-                cur_site_id = cur_site_id[0]
-
-            cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
-            cur_id = cur.fetchall()[0]
-            cur.execute(queries.q['add_to_frontier'], [cur_id])
+    add_urls_to_frontier(new_urls, conn)
 
     # mark page as crawled
     with conn.cursor() as cur:

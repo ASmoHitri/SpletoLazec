@@ -83,9 +83,23 @@ def crawler(conn, crawler_id):
 
 if __name__ == '__main__':
     nr_of_threads = int(sys.argv[1])
+
+    # INIT
+    with psycopg2.connect(user=config.db['username'], password=config.db['password'],
+                          host=config.db['host'], port=config.db['port'], database=config.db['db_name']) as connection:
+        # if frontier empty -> initialize it with seed urls
+        with connection.cursor as cur:
+            cur.execute("SELECT * FROM crawldb.frontier LIMIT 1")
+            frontier_url = cur.fetchone
+            if not frontier_url:
+                process_page.add_urls_to_frontier(config.seed_urls, connection)
+        # make sure all pages in frontier are marked as unoccupied
+        with connection.cursor as cur:
+            cur.execute("UPDATE crawldb.frontier SET occupied=False")
+
+    # CRAWL
     pool = psycopg2.pool.ThreadedConnectionPool(1, nr_of_threads, user=config.db['username'], password=config.db['password'],
                                                 host=config.db['host'], port=config.db['port'], database=config.db['db_name'])
-
     crawlers = []
     for i in range(nr_of_threads):
         c = threading.Thread(target=crawler, args=(pool.getconn(), i))
