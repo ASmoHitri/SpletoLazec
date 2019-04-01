@@ -212,7 +212,7 @@ def add_domain(domain, conn):
 ss = ["http://evem.gov.si", "http://e-uprava.gov.si","http://podatki.gov.si","http://e-prostor.gov.si"]
 
 
-
+#
 # import  psycopg2
 # from config import *
 #
@@ -246,7 +246,7 @@ ss = ["http://evem.gov.si", "http://e-uprava.gov.si","http://podatki.gov.si","ht
 #
 # for site in ss:
 #     print(can_fetch_page(site, conn))
-#
+
 
 
 

@@ -116,13 +116,22 @@ def add_urls_to_frontier(new_urls, conn, parent_page_id=None):
                 cur_site_id = cur_site_id[0]
 
         with conn, conn.cursor() as cur:
-            cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
-            cur_id = cur.fetchall()[0]
+            try:
+                cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
+                cur_id = cur.fetchall()[0]
+            except Exception as e:
+                logging.error("Could not add new page. " + str(e))
         with conn, conn.cursor() as cur:
-            cur.execute(queries.q['add_to_frontier'], [cur_id])
+            try:
+                cur.execute(queries.q['add_to_frontier'], [cur_id])
+            except Exception as e:
+                logging.error("Could not add pag eto frontier. " + str(e))
         with conn, conn.cursor() as cur:
             if parent_page_id:
-                cur.execute(queries.q['add_pages_to_link'], [parent_page_id, cur_id])
+                try:
+                    cur.execute(queries.q['add_pages_to_link'], [parent_page_id, cur_id])
+                except Exception as e:
+                    logging.error("Could not add to link", str(e))
 
 
 def process_page(url: str, conn):
