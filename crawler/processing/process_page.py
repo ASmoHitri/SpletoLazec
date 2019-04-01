@@ -14,7 +14,7 @@ from crawler import config
 from db import queries
 from processing import duplicates
 from processing import process_helpers
-# from processing.robots import add_domain
+from processing.robots import add_domain
 
 
 def fetch_data(url):
@@ -124,7 +124,7 @@ def process_page(url: str, conn):
     page_body = fetch_data(url)
     # handle content duplicates
     if duplicates.html_duplicateCheck(page_body, conn):
-        cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg])
+        cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg, page_id])
         cur.commit()
         cur.close()
         return
@@ -143,10 +143,10 @@ def process_page(url: str, conn):
         cur_split_url = urltools.split(cur_url)
         cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_split_url.netloc])
         cur_site_id = cur.fetchall()
-        # if not cur_site_id:
-        #     cur_site_id = add_domain(cur_split_url.netloc, conn)    # add domain if doesn't exists yet
-        # else:
-        #     cur_site_id = cur_site_id[0]
+        if not cur_site_id:
+            cur_site_id = add_domain(cur_split_url.netloc, conn)    # add domain if doesn't exists yet
+        else:
+            cur_site_id = cur_site_id[0]
 
         cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
         cur_id = cur.fetchall()[0]

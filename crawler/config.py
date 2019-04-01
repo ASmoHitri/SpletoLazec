@@ -7,3 +7,5 @@ db = {
 }
 
 search_domain = "gov.si"
+sleep_time = 60        # in seconds
+max_sleeps = 5
