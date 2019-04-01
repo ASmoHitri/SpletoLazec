@@ -1,16 +1,18 @@
+import re
+import time
+import urltools
+import requests
 import urllib.request
 import urllib.robotparser
-import requests
-import re
-import urltools
-from bs4 import BeautifulSoup
-from process_page import canonicalize_url
-import time
 from datetime import datetime
-import config
+from bs4 import BeautifulSoup
+
+from crawler import config
+from process_page import canonicalize_url
 from duplicates import url_duplicateCheck
 
-#Additional functions
+
+# Additional functions
 def contains_sitemap(txt):
     """
     :param txt:
@@ -21,6 +23,7 @@ def contains_sitemap(txt):
         return findUrl.group(1)
     else:
         return False
+
 
 def get_sitemap(url):
     """
@@ -47,21 +50,22 @@ def process_sitemap(s):
         result.append(loc.text)
     return result
 
+
 def get_robots_content(site_domain):
     """
     Function get_robots_content receives the site domain (without '/robots.txt')
     Fatches and parses robots.txt and sitemap files from the given site
-    :param site url
+    :param site_domain url
     :return: robots content and sitemap content
     """
     url = 'http://' + site_domain + "/robots.txt"
     try:
         data = urllib.request.urlopen(url)
-        #vsebina robots.txt
+        # vsebina robots.txt
         robots_content = data.read().decode()
-        #SiteMap
+        # SiteMap
         site_map_url = contains_sitemap(robots_content)
-        #preverimo, če vsebuje sitemap
+        # preverimo, ce vsebuje sitemap
         if site_map_url:
             site_map_content = get_sitemap(site_map_url)
         else:
@@ -72,6 +76,7 @@ def get_robots_content(site_domain):
         site_map_content = None
     return robots_content, site_map_content
 
+
 def can_fetch_page(url, connection):
     """
     :param url: canonicalized url
@@ -81,24 +86,24 @@ def can_fetch_page(url, connection):
     split_url = urltools.split(url)
     domain = split_url.netloc
 
-    #odpremo povezavo do db
+    # odpremo povezavo do db
     with connection as conn:
         with conn.cursor() as curs:
-            #preverimo, če je domena že v bazi
+            # preverimo, če je domena že v bazi
             curs.execute("SELECT id, robots_content, next_acces, delay FROM crawldb.site WHERE domain = '%s'" % domain)
             existing_domain = curs.fetchone()
 
-            #če domene še ni v bazi
+            # če domene še ni v bazi
             if existing_domain == None:
                 robots_content, sitemap_content = get_robots_content(domain)
 
-                #če robots_content ni prazen
+                # če robots_content ni prazen
                 if robots_content:
                     rp = urllib.robotparser.RobotFileParser()
                     rp.parse(robots_content.splitlines())
                     #  pogledamo, če lahko vhodni url-fetchamo
                     can_fetch = rp.can_fetch("*", url)
-                    #crawl delay (preverimo, če je definiran drugače je privzeta vrednost 4s)
+                    # crawl delay (preverimo, če je definiran drugače je privzeta vrednost 4s)
                     try:
                         delay = rp.crawl_delay("*")
                     except:
@@ -107,11 +112,11 @@ def can_fetch_page(url, connection):
                     can_fetch = True
                     delay = 4
 
-                #če delay ni definiran mu damo privzeto vrednost
+                # če delay ni definiran mu damo privzeto vrednost
                 if not delay:
                     delay = 4
 
-                #definiramo next_acces time
+                # definiramo next_acces time
                 next_acces_time = datetime.fromtimestamp(time.time() + delay)
 
                 # dodamo domeno v bazo
@@ -140,7 +145,7 @@ def can_fetch_page(url, connection):
                 else:
                     return (site_id, False, False, True)
 
-            #če je domena že v bazi, izberemo robots content
+            # če je domena že v bazi, izberemo robots content
             else:
                 site_id = existing_domain[0]
                 robots_content = existing_domain[1]
@@ -148,12 +153,12 @@ def can_fetch_page(url, connection):
                 delay = existing_domain[3]
 
                 # informacije o robots.txt
-                #če je prazen robots, preverimo samo delay
+                # če je prazen robots, preverimo samo delay
                 if not robots_content:
                     visit_time = time.time()
                     if visit_time >= acces_time:
                         next_acces_update = datetime.fromtimestamp(delay + visit_time)
-                        #posodobimo next_acces za domeno
+                        # posodobimo next_acces za domeno
                         sql = """ UPDATE crawldb.site
                                         SET next_acces = %s
                                         WHERE domain = %s"""
@@ -162,7 +167,7 @@ def can_fetch_page(url, connection):
                     else:
                         return (site_id, False, True, False)
                 else:
-                    #robot parser
+                    # robot parser
                     rp = urllib.robotparser.RobotFileParser()
                     rp.parse(robots_content.splitlines())
 
@@ -172,7 +177,7 @@ def can_fetch_page(url, connection):
                         if visit_time >= acces_time:
                             next_acces_update = datetime.fromtimestamp(delay + visit_time)
 
-                            #update next_acces
+                            # update next_acces
                             sql = """ UPDATE crawldb.site
                                       SET next_acces = %s
                                      WHERE domain = %s"""
@@ -184,10 +189,10 @@ def can_fetch_page(url, connection):
                     else:
                         return (site_id, False, False, True)
 
-#funkcija add domain prejme domeno, ki ni v bazi
-#doda domeno v bazo in vrne site_id
+
 def add_domain(domain, connection):
     """
+    Accepts domain that is not in DB yet, add domain to DB and returns site_id
     :param domain that has to be added to the DB
     :param connection to the DB
     :return: site_id of the newly added site
@@ -227,7 +232,7 @@ def add_domain(domain, connection):
                 sites = process_sitemap(sitemap_content)
                 for site in sites:
                     cannon_site = canonicalize_url(site, "http", domain, config.search_domain)
-                    #če se stran še ni pojavila jo dodamo v bazo
+                    # če se stran še ni pojavila jo dodamo v bazo
                     if url_duplicateCheck(cannon_site, conn):
                         curs.execute("INSERT INTO crawldb.page (site_id, page_type_code,url, accesed_time) RETURNING id",
                                      [site_id, 'FRONTIER', cannon_site, datetime.now()])
@@ -238,8 +243,8 @@ def add_domain(domain, connection):
     return site_id
 
 
-#TEST
-#definiramo seznam začetnih spletnih mest za katere bomo pobrali robots.txt in parsali sitemapa, če jih vsebujejo
+# TEST
+# definiramo seznam začetnih spletnih mest za katere bomo pobrali robots.txt in parsali sitemapa, če jih vsebujejo
 ss = ["http://evem.gov.si", "http://e-uprava.gov.si","http://podatki.gov.si","http://e-prostor.gov.si"]
 
 

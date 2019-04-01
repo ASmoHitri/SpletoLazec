@@ -237,21 +237,3 @@ def process_page(url: str, conn):
         ['HTML', page_body, state_arg, page_id])
     cur.commit()
     cur.close()
-
-
-if __name__ == '__main__':
-    # # url1 = "http://dev.vitabits.org"  # should redirect!?!
-    url1 = "http://podatki.gov.si"
-    # # soup = BeautifulSoup(requests.get(url1).text, features="html.parser")
-    # # soup.find_all('img')[0]['src']
-    #
-    # # fetch_data(url1)
-    process_page(url1)
-    print("zacetek")
-    str = "doc.min.oiiof"
-    str1 = re.search("doc", str)
-    print(str1.group(0))
-
-
-
-
