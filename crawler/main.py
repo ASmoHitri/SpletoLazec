@@ -24,19 +24,20 @@ def get_page_to_process(connection, sleep_time, max_sleeps):
         with connection, connection.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             cur.execute(queries.q['get_page_id_from_frontier'])      # get page id & mark as occupied
             urls = cur.fetchall()
-            if not urls:
-                if consecutive_sleeps >= max_sleeps:
-                    return None
-                logging.info("NO URLS IN FRONTIER, GOING TO SLEEP FOR {0} SECONDS".format(sleep_time))
-                consecutive_sleeps += 1
-                time.sleep(sleep_time)
-            else:
-                # get page
-                page_id = urls[0]['page_id']
+        if not urls:
+            if consecutive_sleeps >= max_sleeps:
+                return None
+            logging.info("NO URLS IN FRONTIER, GOING TO SLEEP FOR {0} SECONDS".format(sleep_time))
+            consecutive_sleeps += 1
+            time.sleep(sleep_time)
+        else:
+            # get page
+            page_id = urls[0]['page_id']
+            with connection, connection.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
                 cur.execute(queries.q['get_page_by_id'], [page_id])
                 new_page = cur.fetchone()
-                # mark page as occupied in frontier
-                # cur.execute(queries.q['update_frontier_page_occ'], [True, page_id])
+            # mark page as occupied in frontier
+            # cur.execute(queries.q['update_frontier_page_occ'], [True, page_id])
     return new_page
 
 
@@ -48,7 +49,9 @@ def crawler(conn, crawler_id):
         page_to_free = -1       # id of page to free after getting new page from frontier
         while not can_fetch:
             # get next URL from frontier
+            time.sleep(crawler_id / 20)
             current_page = get_page_to_process(conn, config.sleep_time, config.max_sleeps)
+            # print("frontier page", current_page["url"], "crawler", crawler_id)
             if not current_page:
                 logging.info("**********************************************************************")
                 logging.info("          NO MORE URLS TO PARSE, CRAWLER {0} STOPPING.                ".format(crawler_id))
@@ -58,7 +61,7 @@ def crawler(conn, crawler_id):
 
             if page_to_free >= 0:
                 with conn, conn.cursor() as cur:
-                    cur.execute(queries.q['update_frontier_page_occ'], [False, page_to_free])
+                    cur.execute(queries.q['update_frontier_page_occ&time'], [False, page_to_free])
                 page_to_free = -1
 
             current_url = current_page['url']
@@ -74,7 +77,8 @@ def crawler(conn, crawler_id):
                         cur.execute(queries.q['update_page_codes'], ['FORBIDDEN', None, current_page_id])  # mark as forbidden
                         cur.execute(queries.q['remove_from_frontier'], [current_page_id])                  # remove from frontier
                     continue
-        process_page.process_page(current_url, conn)
+            print("can process", current_page["url"], "crawler", crawler_id)
+        process_page.process_page(current_url, conn, crawler_id)
         # remove page from frontier
         with conn, conn.cursor() as cur:
             cur.execute(queries.q['remove_from_frontier'], [current_page_id])

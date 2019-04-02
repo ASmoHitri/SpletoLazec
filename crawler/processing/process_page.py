@@ -85,12 +85,12 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
 
     for url in urls_binary:
         data_type_code = (url.split('.')[-1]).upper()
-        #r = requests.get(url, stream=True)
-        # content = r.raw.read(3000000)  # TODO tu mozno se potreben decode
-        # with conn, conn.cursor() as cur:
-        #     cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
-        #                 [page_id, data_type_code, psycopg2.Binary(content)])
         try:
+            # r = requests.get(url, stream=True, verify=False)
+            # content = r.raw.read(2000000)  # TODO tu mozno se potreben decode
+            # with conn, conn.cursor() as cur:
+            #     cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
+            #                 [page_id, data_type_code, psycopg2.Binary(content)])
             with conn, conn.cursor() as cur:
                 cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
                             [page_id, data_type_code, None])
@@ -102,7 +102,7 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
         filename = "".join(split[:-1])
         content_type = split[-1].lower()
         if content_type in {'img', 'png', 'jpg'}:
-            #r = requests.get(url, stream=True)
+            #r = requests.get(url, stream=True, verify=False)
             # content = r.raw.read(3000000)
             # with conn, conn.cursor() as cur:
             #     cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) \
@@ -152,7 +152,7 @@ def add_urls_to_frontier(new_urls, conn, parent_page_id=None):
                     logging.error("Could not add to link")
 
 
-def process_page(url: str, conn):
+def process_page(url: str, conn, crawler_id):
     (page_state, state_arg) = get_page_state(url)
 
     with conn, conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
@@ -194,7 +194,7 @@ def process_page(url: str, conn):
             logging.error("Could not handle saving None response from HTTP request")
         return
     page_body = fetch_data(url)
-    print(url, "crawler")
+    # print(url, "crawler ", crawler_id)
     if not page_body:
         try:
             cur.execute(queries.q['remove_from_frontier'], [page_id])
@@ -204,6 +204,7 @@ def process_page(url: str, conn):
         return
     # handle content duplicates
     if duplicates.html_duplicateCheck(page_body, page_id, conn):
+        print(url, "duplicate", "crawler", crawler_id)
         with conn, conn.cursor() as cur:
             try:
                 cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg, page_id])

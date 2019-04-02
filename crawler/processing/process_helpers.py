@@ -50,6 +50,8 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
     # href URLs
     for link in page_data.find_all(href=True):
         url = link.get("href")
+        if re.search("^[\w\.\+\-]+\@[\w]+\.[a-z]{2,3}$", url):
+            continue
         canon_url = canonicalize_url(url, parent_scheme, parent_host, search_domain)
         if canon_url:
             if re.search(ignore_regex, canon_url):
@@ -57,6 +59,12 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
             if re.search(binaries_regex, canon_url):
                 binaries_urls.append(canon_url)
             else:
+                regex_res = re.search("\.[a-zA-Z]*$", canon_url)
+                if regex_res:
+                    file_extension = regex_res.group(0)[1:].lower()
+                    # if file_extension not in ['html', 'htm', 'php', 'aspx', 'asp', 'jsp']:
+                    if file_extension in ['pdf', 'ppt', 'pptx', 'potx', 'pps', 'ppsx', 'ps', 'zip', 'img', 'jpg', 'jpeg', 'png', 'exe', 'tar', 'doc', 'docx', 'xls', 'xslx', 'csv', 'txt', 'dat']:
+                        continue
                 page_urls.append(canon_url)
 
     # onClick URLs
