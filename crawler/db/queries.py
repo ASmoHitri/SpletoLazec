@@ -1,5 +1,14 @@
 q = {
-    'get_url_id_from_frontier': "SELECT page_id FROM crawldb.frontier WHERE occupied=False ORDER BY time_added LIMIT 1",
+    'get_page_id_from_frontier': "UPDATE crawldb.frontier \
+                                 SET occupied=True \
+                                 WHERE page_id=(SELECT page_id \
+                                                FROM crawldb.frontier \
+                                                WHERE occupied=False \
+                                                ORDER BY time_added \
+                                                LIMIT 1) \
+                                 RETURNING page_id",
+    # 'get_url_id_from_frontier': "SELECT page_id FROM crawldb.frontier WHERE occupied=False ORDER BY time_added LIMIT 1",
+    'get_link': "SELECT * FROM crawldb.link WHERE from_page=%s AND to_page=%s",
     'get_page_by_id': "SELECT * FROM crawldb.page WHERE id=%s",
     'get_site_by_domain': "SELECT * FROM crawldb.site WHERE domain=%s",
     'add_to_frontier': "INSERT INTO crawldb.frontier (page_id) VALUES(%s)",

@@ -45,12 +45,15 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
 
     page_urls = []
     binaries_urls = []
-    binaries_regex = ".(pdf|PDF|doc|DOC|ppt|PPT)(x|X)?\/?$"
+    binaries_regex = "\.(pdf|PDF|doc|DOC|ppt|PPT)(x|X)?\/?$"
+    ignore_regex = "\.(mp4|MP4|avi|AVI)$"
     # href URLs
     for link in page_data.find_all(href=True):
         url = link.get("href")
         canon_url = canonicalize_url(url, parent_scheme, parent_host, search_domain)
         if canon_url:
+            if re.search(ignore_regex, canon_url):
+                continue
             if re.search(binaries_regex, canon_url):
                 binaries_urls.append(canon_url)
             else:
@@ -72,11 +75,11 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
 
     # img urls
     img_urls = []
-    img_regex = ".(png|PNG|img|IMG|jp(e)?g|JP(E)?G)$"
+    img_regex = "\.(png|PNG|img|IMG|jp(e)?g|JP(E)?G)$"
     for link in page_data.find_all("img"):
-        url = link["src"]
-        canon_url = canonicalize_url(url, parent_scheme, parent_host)
-        if canon_url and re.search(img_regex, canon_url):
-            img_urls.append(canon_url)
+        if link.has_attr("src"):
+            canon_url = canonicalize_url(link["src"], parent_scheme, parent_host)
+            if canon_url and re.search(img_regex, canon_url):
+                img_urls.append(canon_url)
 
     return page_urls, binaries_urls, img_urls

@@ -22,7 +22,7 @@ def get_page_to_process(connection, sleep_time, max_sleeps):
     new_page = {}
     while not new_page:
         with connection, connection.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(queries.q['get_url_id_from_frontier'])
+            cur.execute(queries.q['get_page_id_from_frontier'])      # get page id & mark as occupied
             urls = cur.fetchall()
             if not urls:
                 if consecutive_sleeps >= max_sleeps:
@@ -36,11 +36,12 @@ def get_page_to_process(connection, sleep_time, max_sleeps):
                 cur.execute(queries.q['get_page_by_id'], [page_id])
                 new_page = cur.fetchone()
                 # mark page as occupied in frontier
-                cur.execute(queries.q['update_frontier_page_occ'], [True, page_id])
+                # cur.execute(queries.q['update_frontier_page_occ'], [True, page_id])
     return new_page
 
 
 def crawler(conn, crawler_id):
+    time.sleep(crawler_id)
     while True:
         can_fetch = False
         current_url = ""

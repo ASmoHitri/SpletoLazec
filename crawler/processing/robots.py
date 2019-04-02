@@ -68,7 +68,7 @@ def get_robots_content(site_domain):
         else:
             site_map_content = None
         return robots_content, site_map_content
-    except urllib.error.HTTPError as err:
+    except (urllib.error.HTTPError, urllib.error.URLError) as err:
         robots_content = None
         site_map_content = None
     return robots_content, site_map_content

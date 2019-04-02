@@ -31,6 +31,7 @@ def fetch_data(url):
     try:
         driver = webdriver.Chrome(executable_path=os.path.abspath('./web_driver/chromedriver.exe'), options=options)
         driver.get(url)
+        driver.implicitly_wait(10)
     except WebDriverException as e:
         logging.error(e.msg)
         return None
@@ -38,6 +39,8 @@ def fetch_data(url):
     soup = BeautifulSoup(driver.page_source, features="html.parser")
     for script in soup(["head"]):
         script.extract()
+    if not soup.find("body"):
+        soup = None
     driver.close()
     return soup
 
@@ -82,23 +85,36 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
 
     for url in urls_binary:
         data_type_code = (url.split('.')[-1]).upper()
-        r = requests.get(url, stream=True)
-        content = r.raw.read(10000000)  # TODO tu mozno se potreben decode
-        with conn, conn.cursor() as cur:
-            cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
-                        [page_id, data_type_code, psycopg2.Binary(content)])
+        #r = requests.get(url, stream=True)
+        # content = r.raw.read(3000000)  # TODO tu mozno se potreben decode
+        # with conn, conn.cursor() as cur:
+        #     cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
+        #                 [page_id, data_type_code, psycopg2.Binary(content)])
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
+                            [page_id, data_type_code, None])
+        except Exception:
+            logging.error("Could not save page data to DB.")
 
     for url in urls_img:
         split = url.split('.')
         filename = "".join(split[:-1])
         content_type = split[-1].lower()
         if content_type in {'img', 'png', 'jpg'}:
-            r = requests.get(url, stream=True)
-            content = r.raw.read(10000000)
-            with conn, conn.cursor() as cur:
-                cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) \
-                             VALUES (%s, %s, %s, %s, %s)",
-                            [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
+            #r = requests.get(url, stream=True)
+            # content = r.raw.read(3000000)
+            # with conn, conn.cursor() as cur:
+            #     cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) \
+            #                  VALUES (%s, %s, %s, %s, %s)",
+            #                 [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
+            try:
+                with conn, conn.cursor() as cur:
+                    cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) \
+                                 VALUES (%s, %s, %s, %s, %s)",
+                                [page_id, filename, content_type, None, datetime.now()])
+            except Exception:
+                logging.error("Could not add image to DB.")
     return
 
 
@@ -119,19 +135,21 @@ def add_urls_to_frontier(new_urls, conn, parent_page_id=None):
             try:
                 cur.execute(queries.q['add_new_page'], [cur_site_id, 'FRONTIER', cur_url])
                 cur_id = cur.fetchall()[0]
-            except Exception as e:
-                logging.error("Could not add new page. " + str(e))
+            except Exception:
+                logging.error("Could not add new page. ")
         with conn, conn.cursor() as cur:
             try:
                 cur.execute(queries.q['add_to_frontier'], [cur_id])
-            except Exception as e:
-                logging.error("Could not add pag eto frontier. " + str(e))
+            except Exception:
+                logging.error("Could not add page to frontier. ")
         with conn, conn.cursor() as cur:
             if parent_page_id:
                 try:
-                    cur.execute(queries.q['add_pages_to_link'], [parent_page_id, cur_id])
-                except Exception as e:
-                    logging.error("Could not add to link", str(e))
+                    cur.execute(queries.q['get_link'], [parent_page_id, cur_id])
+                    if not cur.fetchone():
+                        cur.execute(queries.q['add_pages_to_link'], [parent_page_id, cur_id])
+                except Exception:
+                    logging.error("Could not add to link")
 
 
 def process_page(url: str, conn):
@@ -146,30 +164,52 @@ def process_page(url: str, conn):
     if page_state == "error":
         # if page returned error before just remove from frontier, otherwise re-add to frontier & update code
         with conn, conn.cursor() as cur:
-            cur.execute(queries.q['remove_from_frontier'], [page_id])
+            try:
+                cur.execute(queries.q['remove_from_frontier'], [page_id])
+            except Exception:
+                logging.error("Could not remove url with error response code from frontier.")
         if page['http_status_code']:
             page_type = 'HTML'
         else:
             page_type = 'FRONTIER'
             with conn, conn.cursor() as cur:
-                cur.execute(queries.q['add_to_frontier'], [page_id])
+                try:
+                    cur.execute(queries.q['add_to_frontier'], [page_id])
+                except Exception:
+                    logging.error("Could not add url with error response code back to frontier.")
         with conn, conn.cursor() as cur:
-            cur.execute(queries.q['update_page_codes'], [page_type, state_arg, page_id])
+            try:
+                cur.execute(queries.q['update_page_codes'], [page_type, state_arg, page_id])
+            except Exception:
+                logging.error("Could not update page code for url with error response code.")
         return
     elif page_state is None:
         # failed to fetch page -> re-add page to frontier
-        with conn, conn.cursor() as cur:
-            cur.execute(queries.q['remove_from_frontier'], [page_id])
-        with conn, conn.cursor() as cur:
-            cur.execute(queries.q['add_to_frontier'], [page_id])
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute(queries.q['remove_from_frontier'], [page_id])
+            with conn, conn.cursor() as cur:
+                cur.execute(queries.q['add_to_frontier'], [page_id])
+        except Exception:
+            logging.error("Could not handle saving None response from HTTP request")
         return
-
     page_body = fetch_data(url)
-    # handle content duplicates
-    if duplicates.html_duplicateCheck(page_body, conn):
-        with conn, conn.cursor() as cur:
-            cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg, page_id])
+    print(url, "crawler")
+    if not page_body:
+        try:
             cur.execute(queries.q['remove_from_frontier'], [page_id])
+            cur.execute(queries.q['update_page_codes'], ["HTML", state_arg, page_id])
+        except Exception:
+            logging.error("Could not remove url that couldn't be fetched from frontier.")
+        return
+    # handle content duplicates
+    if duplicates.html_duplicateCheck(page_body, page_id, conn):
+        with conn, conn.cursor() as cur:
+            try:
+                cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg, page_id])
+                cur.execute(queries.q['remove_from_frontier'], [page_id])
+            except Exception:
+                logging.error("Could not handle duplicates saving.")
         return
 
     # parse/process page
@@ -182,8 +222,13 @@ def process_page(url: str, conn):
     add_urls_to_frontier(new_urls, conn, page_id)
 
     # mark page as crawled
-    page_html = str(page_body)
-    content_hash = hashlib.md5(page_html.encode()).hexdigest()
+    page_html = ""
+    content_hash = None
+    try:
+        page_html = page_body.prettify()
+        content_hash = hashlib.md5(page_html.encode()).hexdigest()
+    except Exception:
+        logging.error("Could not stringify soup")
     # print(content_hash)
     with conn, conn.cursor() as cur:
         cur.execute(
