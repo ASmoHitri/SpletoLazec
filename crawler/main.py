@@ -85,7 +85,7 @@ def crawler(conn, crawler_id):
 
 
 def start_crawlers(nr_of_threads):
-    db_pool = psycopg2.pool.ThreadedConnectionPool(5, 20, user=config.db['username'],
+    db_pool = psycopg2.pool.ThreadedConnectionPool(5, nr_of_threads + 10, user=config.db['username'],
                                                    password=config.db['password'],
                                                    host=config.db['host'], port=config.db['port'],
                                                    database=config.db['db_name'])

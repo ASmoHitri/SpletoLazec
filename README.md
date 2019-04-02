@@ -17,7 +17,7 @@ Koraki zagona:
   Konfiguracija se nahaja v datoteki crawler/config.py. Tu je nujno nastaviti prave vrednosti za povezavo z bazo,  
   začetne URLje, ki jih program ob prvem zagonu doda v seznam še nepregledanih strani in domeno po kateri naj išče
   (če želimo da pajek išče po vseh domenah nastavimo to vrednost na prazen niz).
-+ zagon programa **iz direktorija crawler**: `py main.py <število_workejev>`  
++ zagon programa **iz direktorija crawler**: `py main.py <število_workerjev>`  
   
 ### Primer postavitve in inicializacije baze z Dockerjem  
 + `docker run -dit -p 5432:5432 -e POSTGRES_DB=crawler --name db-crawler  postgres`
