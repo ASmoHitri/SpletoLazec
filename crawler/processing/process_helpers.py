@@ -5,13 +5,13 @@ from bs4 import BeautifulSoup
 from urllib.parse import quote
 
 
-def canonicalize_url(url, parent_scheme, parent_host, search_domain=""):
+def canonicalize_url(url, parent_scheme, parent_host, search_domains=[]):
     """
     Canonicalizes given URL. If path is relative, parent_scheme and parent_host are used.
     :param url: URL to canonicalize
     :param parent_scheme: Parent page's scheme
     :param parent_host: Parent page's host (domain name)
-    :param search_domain: Crawlers search domain. If specified, URL's domain is checked against it.
+    :param search_domains: Crawlers search domain. If specified, URL's domain is checked against it.
     :return: Canonicalized URL / None if bad domain
     """
 
@@ -20,7 +20,10 @@ def canonicalize_url(url, parent_scheme, parent_host, search_domain=""):
     # handle relative URLs
     scheme = split_url.scheme or parent_scheme
     netloc = split_url.netloc or parent_host
-    if scheme not in ["http", "https"] or not re.match(".*" + search_domain + "/?$", netloc):
+
+    search_domain_regex = "|".join(search_domains)
+
+    if scheme not in ["http", "https"] or not re.match(".*(" + search_domain_regex + ")/?$", netloc):
         return None
     path = split_url.path if (split_url.path and split_url.path[0] == "/") \
         else ("/" + split_url.path)                                                         # start path with /
@@ -32,11 +35,11 @@ def canonicalize_url(url, parent_scheme, parent_host, search_domain=""):
     return canon_url
 
 
-def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_domain=""):
+def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_domains=[]):
     """
     Parses and normalizes all href and onClick URLs present in page_data
     :param page_data: page DOM
-    :param search_domain: Crawlers search domain
+    :param search_domains: Crawlers search domain
     :param parent_scheme: Parent page's scheme
     :param parent_host: Parent page's host (domain name)
 
@@ -52,7 +55,7 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
         url = link.get("href")
         if re.search("^[\w\.\+\-]+\@[\w]+\.[a-z]{2,3}$", url):
             continue
-        canon_url = canonicalize_url(url, parent_scheme, parent_host, search_domain)
+        canon_url = canonicalize_url(url, parent_scheme, parent_host, search_domains)
         if canon_url:
             if re.search(ignore_regex, canon_url):
                 continue
@@ -63,7 +66,7 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
                 if regex_res:
                     file_extension = regex_res.group(0)[1:].lower()
                     # if file_extension not in ['html', 'htm', 'php', 'aspx', 'asp', 'jsp']:
-                    if file_extension in ['pdf', 'ppt', 'pptx', 'potx', 'pps', 'ppsx', 'ps', 'zip', 'img', 'jpg', 'jpeg', 'png', 'exe', 'tar', 'doc', 'docx', 'xls', 'xslx', 'csv', 'txt', 'dat']:
+                    if file_extension in ['pdf', 'ppt', 'pptx', 'potx', 'pps', 'ppsx', 'ps', 'zip', 'img', 'jpg', 'jpeg', 'png', 'exe', 'tar', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'dat']:
                         continue
                 page_urls.append(canon_url)
 
@@ -74,7 +77,7 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
         if before_link:
             before_link = before_link.group(0)
             onclick_link = onclick_link.replace(before_link, "").replace("'", "")
-            canon_url = canonicalize_url(onclick_link, parent_scheme, parent_host, search_domain)
+            canon_url = canonicalize_url(onclick_link, parent_scheme, parent_host, search_domains)
             if canon_url:
                 if re.search(binaries_regex, canon_url):
                     binaries_urls.append(canon_url)

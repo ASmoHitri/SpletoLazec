@@ -135,7 +135,7 @@ def can_fetch_page(url, conn):
         if sitemap_content:
             sites = process_sitemap(sitemap_content)
             for site in sites:
-                cannon_site = canonicalize_url(site, parent_scheme, domain, config.search_domain)
+                cannon_site = canonicalize_url(site, parent_scheme, domain, config.search_domains)
                 if cannon_site == None:
                     continue
                 # če se stran še ni pojavila jo dodamo v bazo

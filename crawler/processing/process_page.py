@@ -217,7 +217,7 @@ def process_page(url: str, conn, crawler_id):
     split_url = urltools.split(url)
     url_scheme = split_url.scheme
     url_netloc = split_url.netloc
-    new_urls, binary_urls, img_urls = process_helpers.get_page_urls(page_body, url_scheme, url_netloc, config.search_domain)
+    new_urls, binary_urls, img_urls = process_helpers.get_page_urls(page_body, url_scheme, url_netloc, config.search_domains)
 
     get_files(url, img_urls, binary_urls, conn)
     add_urls_to_frontier(new_urls, conn, page_id)
