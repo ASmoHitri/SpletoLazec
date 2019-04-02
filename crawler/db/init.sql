@@ -1,5 +1,5 @@
 CREATE SCHEMA IF NOT EXISTS crawldb;
-SET timezone TO 'Europe/Berlin';
+SELECT set_config('timezone','Europe/Berlin', false);
 CREATE TABLE crawldb.data_type (
 	code                 varchar(20)  NOT NULL,
 	CONSTRAINT pk_data_type_code PRIMARY KEY ( code )
