@@ -1,12 +1,9 @@
 # SpletoLazec
 Spletni pajek za seminarsko nalogo pri predmetu WIER  
 
-Projekt implementira spletnega pajka, ki pri pregledovanju spleta uporablja iskanje v širino.  
-Pajek pri tem upošteva pravila crawlanja posameznih domen, ki so definirana v robots.txt,
-te datoteke pa mu pomagajo tudi pri lociranju novih strani (z definicijo SiteMap-ov).  
-SpletoLazec pri svojem delu prepoznava in beleži duplikate strani.  
+Projekt implementira spletnega pajka, ki pri pregledovanju spleta uporablja iskanje v širino. Pajek pri tem upošteva pravila crawlanja posameznih domen, ki so definirana v robots.txt, te datoteke pa mu pomagajo tudi pri lociranju novih strani (z definicijo SiteMap-ov). SpletoLazec pri svojem delu prepoznava in beleži duplikate strani.  
 
-##Zagon pajka
+## Zagon pajka
 Za zagon SpletoLazca potrebujemo PostgreSQL bazo ter Python3. 
 
 Koraki zagona:
