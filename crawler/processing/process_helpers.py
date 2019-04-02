@@ -65,7 +65,6 @@ def get_page_urls(page_data: BeautifulSoup, parent_scheme, parent_host, search_d
                 regex_res = re.search("\.[a-zA-Z]*$", canon_url)
                 if regex_res:
                     file_extension = regex_res.group(0)[1:].lower()
-                    # if file_extension not in ['html', 'htm', 'php', 'aspx', 'asp', 'jsp']:
                     if file_extension in ['pdf', 'ppt', 'pptx', 'potx', 'pps', 'ppsx', 'ps', 'zip', 'img', 'jpg', 'jpeg', 'png', 'exe', 'tar', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'dat']:
                         continue
                 page_urls.append(canon_url)

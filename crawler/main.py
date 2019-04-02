@@ -22,7 +22,8 @@ def get_page_to_process(connection, sleep_time, max_sleeps):
     new_page = {}
     while not new_page:
         with connection, connection.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            cur.execute(queries.q['get_page_id_from_frontier'])      # get page id & mark as occupied
+            # get page id & mark as occupied
+            cur.execute(queries.q['get_page_id_from_frontier'])
             urls = cur.fetchall()
         if not urls:
             if consecutive_sleeps >= max_sleeps:
@@ -36,8 +37,6 @@ def get_page_to_process(connection, sleep_time, max_sleeps):
             with connection, connection.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
                 cur.execute(queries.q['get_page_by_id'], [page_id])
                 new_page = cur.fetchone()
-            # mark page as occupied in frontier
-            # cur.execute(queries.q['update_frontier_page_occ'], [True, page_id])
     return new_page
 
 
@@ -51,10 +50,10 @@ def crawler(conn, crawler_id):
             # get next URL from frontier
             time.sleep(crawler_id / 20)
             current_page = get_page_to_process(conn, config.sleep_time, config.max_sleeps)
-            # print("frontier page", current_page["url"], "crawler", crawler_id)
             if not current_page:
                 logging.info("**********************************************************************")
-                logging.info("          NO MORE URLS TO PARSE, CRAWLER {0} STOPPING.                ".format(crawler_id))
+                logging.info(
+                    "          NO MORE URLS TO PARSE, CRAWLER {0} STOPPING.                ".format(crawler_id))
                 logging.info("**********************************************************************")
                 conn.close()
                 return
@@ -74,10 +73,11 @@ def crawler(conn, crawler_id):
                     continue
                 else:                                           # can't fetch -> forbidden
                     with conn, conn.cursor() as cur:
-                        cur.execute(queries.q['update_page_codes'], ['FORBIDDEN', None, current_page_id])  # mark as forbidden
-                        cur.execute(queries.q['remove_from_frontier'], [current_page_id])                  # remove from frontier
+                        cur.execute(queries.q['update_page_codes'], [
+                                    'FORBIDDEN', None, current_page_id])  # mark as forbidden
+                        cur.execute(queries.q['remove_from_frontier'], [
+                                    current_page_id])                  # remove from frontier
                     continue
-            print("can process", current_page["url"], "crawler", crawler_id)
         process_page.process_page(current_url, conn, crawler_id)
         # remove page from frontier
         with conn, conn.cursor() as cur:

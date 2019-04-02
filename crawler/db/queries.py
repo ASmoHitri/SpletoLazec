@@ -1,12 +1,4 @@
 q = {
-    # 'get_page_id_from_frontier': "UPDATE crawldb.frontier \
-    #                              SET occupied=True \
-    #                              WHERE page_id=(SELECT page_id \
-    #                                             FROM crawldb.frontier \
-    #                                             WHERE occupied=False \
-    #                                             ORDER BY time_added \
-    #                                             LIMIT 1) \
-    #                              RETURNING page_id",
     'get_page_id_from_frontier': "UPDATE crawldb.frontier \
                                  SET occupied=True \
                                  WHERE page_id=( \
@@ -29,6 +21,5 @@ q = {
     'update_page_codes': "UPDATE crawldb.page \
                           SET page_type_code=%s, http_status_code=%s, accessed_time=NOW() \
                           WHERE id=%s",
-    'update_frontier_page_occ&time': "UPDATE crawldb.frontier SET occupied=%s WHERE page_id=%s",
-    # 'update_frontier_page_occ&time': "UPDATE crawldb.frontier SET occupied=%s, time_added=time_added + interval '0.1 second' WHERE page_id=%s",
+    'update_frontier_page_occ&time': "UPDATE crawldb.frontier SET occupied=%s WHERE page_id=%s"
 }

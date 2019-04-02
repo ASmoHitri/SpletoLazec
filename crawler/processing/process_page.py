@@ -29,7 +29,8 @@ def fetch_data(url):
     options.add_argument("--headless")
     options.add_argument('--ignore-certificate-errors')
     try:
-        driver = webdriver.Chrome(executable_path=os.path.abspath('./web_driver/chromedriver.exe'), options=options)
+        driver = webdriver.Chrome(executable_path=os.path.abspath(
+            './web_driver/chromedriver.exe'), options=options)
         driver.get(url)
         driver.implicitly_wait(10)
     except WebDriverException as e:
@@ -86,14 +87,11 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
     for url in urls_binary:
         data_type_code = (url.split('.')[-1]).upper()
         try:
-            # r = requests.get(url, stream=True, verify=False)
-            # content = r.raw.read(2000000)  # TODO tu mozno se potreben decode
-            # with conn, conn.cursor() as cur:
-            #     cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
-            #                 [page_id, data_type_code, psycopg2.Binary(content)])
+            r = requests.get(url, stream=True, verify=False)
+            content = r.raw.read(2000000)
             with conn, conn.cursor() as cur:
                 cur.execute("INSERT into crawldb.page_data (page_id, data_type_code, \"data\") VALUES (%s, %s, %s)",
-                            [page_id, data_type_code, None])
+                            [page_id, data_type_code, psycopg2.Binary(content)])
         except Exception:
             logging.error("Could not save page data to DB.")
 
@@ -102,17 +100,13 @@ def get_files(parent_url: str, urls_img: list, urls_binary: list, conn):
         filename = "".join(split[:-1])
         content_type = split[-1].lower()
         if content_type in {'img', 'png', 'jpg'}:
-            #r = requests.get(url, stream=True, verify=False)
-            # content = r.raw.read(3000000)
-            # with conn, conn.cursor() as cur:
-            #     cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) \
-            #                  VALUES (%s, %s, %s, %s, %s)",
-            #                 [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
             try:
+                r = requests.get(url, stream=True, verify=False)
+                content = r.raw.read(3000000)
                 with conn, conn.cursor() as cur:
                     cur.execute("INSERT into crawldb.image (page_id, filename, content_type, data, accessed_time) \
                                  VALUES (%s, %s, %s, %s, %s)",
-                                [page_id, filename, content_type, None, datetime.now()])
+                                [page_id, filename, content_type, psycopg2.Binary(content), datetime.now()])
             except Exception:
                 logging.error("Could not add image to DB.")
     return
@@ -127,7 +121,8 @@ def add_urls_to_frontier(new_urls, conn, parent_page_id=None):
             cur.execute("SELECT id from crawldb.site WHERE \"domain\" = %s", [cur_split_url.netloc])
             cur_site_id = cur.fetchall()
             if not cur_site_id:
-                cur_site_id = add_domain(cur_split_url.netloc, conn)    # add domain if doesn't exists yet
+                # add domain if doesn't exists yet
+                cur_site_id = add_domain(cur_split_url.netloc, conn)
             else:
                 cur_site_id = cur_site_id[0]
 
@@ -159,7 +154,6 @@ def process_page(url: str, conn, crawler_id):
         cur.execute("SELECT * from crawldb.page WHERE url = %s", [url])
         page = cur.fetchall()[0]
         page_id = page['id']
-        # site_id = page['site_id']
 
     if page_state == "error":
         # if page returned error before just remove from frontier, otherwise re-add to frontier & update code
@@ -194,7 +188,6 @@ def process_page(url: str, conn, crawler_id):
             logging.error("Could not handle saving None response from HTTP request")
         return
     page_body = fetch_data(url)
-    # print(url, "crawler ", crawler_id)
     if not page_body:
         try:
             cur.execute(queries.q['remove_from_frontier'], [page_id])
@@ -204,7 +197,6 @@ def process_page(url: str, conn, crawler_id):
         return
     # handle content duplicates
     if duplicates.html_duplicateCheck(page_body, page_id, conn):
-        print(url, "duplicate", "crawler", crawler_id)
         with conn, conn.cursor() as cur:
             try:
                 cur.execute(queries.q['update_page_codes'], ['DUPLICATE', state_arg, page_id])
@@ -217,7 +209,8 @@ def process_page(url: str, conn, crawler_id):
     split_url = urltools.split(url)
     url_scheme = split_url.scheme
     url_netloc = split_url.netloc
-    new_urls, binary_urls, img_urls = process_helpers.get_page_urls(page_body, url_scheme, url_netloc, config.search_domains)
+    new_urls, binary_urls, img_urls = process_helpers.get_page_urls(
+        page_body, url_scheme, url_netloc, config.search_domains)
 
     get_files(url, img_urls, binary_urls, conn)
     add_urls_to_frontier(new_urls, conn, page_id)
@@ -230,7 +223,6 @@ def process_page(url: str, conn, crawler_id):
         content_hash = hashlib.md5(page_html.encode()).hexdigest()
     except Exception:
         logging.error("Could not stringify soup")
-    # print(content_hash)
     with conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE crawldb.page \
