@@ -8,8 +8,8 @@ import time
 from datetime import datetime
 import config
 
-from duplicates import url_duplicateCheck
-from process_helpers import canonicalize_url
+from processing.duplicates import url_duplicateCheck
+from processing.process_helpers import canonicalize_url
 
 # Additional functions
 

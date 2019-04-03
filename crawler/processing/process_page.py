@@ -12,7 +12,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
 
-from crawler import config
+import config
 from db import queries
 from processing import duplicates
 from processing import process_helpers
